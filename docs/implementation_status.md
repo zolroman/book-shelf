@@ -61,6 +61,16 @@
     - `/health/ready` (repository + external integration config checks);
   - retry/backoff hardening for Jackett and qBittorrent adapters;
   - auth token storage strategy review documented in `docs/auth_token_storage_strategy.md`.
+- Phase 10 QA/release/docs baseline:
+  - full build and test verification completed for API, app, and test projects;
+  - end-to-end API smoke path validated:
+    - search -> download start -> progress/history update -> local asset delete -> history/progress retained;
+  - release/operations documentation added:
+    - `docs/deployment_guide.md`
+    - `docs/runbook.md`
+    - `docs/troubleshooting.md`
+    - `docs/api_usage_examples.md`
+    - `docs/release_notes.md`
 - Tests:
   - domain/infrastructure/api unit tests are green locally.
 
@@ -77,3 +87,5 @@
 - MAUI Windows build: success.
 - Unit tests: success.
 - API smoke test: success (`books`, `search`, `library add/list`, `downloads candidates/start/status/assets`, `progress text/audio`, `history started/completed`).
+- Health endpoints: success (`/health/live`, `/health/ready`).
+- Retention smoke check: success (history/progress remain after `DELETE /api/assets/{bookFormatId}`).
