@@ -1,0 +1,152 @@
+@page "/read/{BookId:int}"
+@inject IBookshelfApiClient ApiClient
+@inject IReadingSessionService SessionService
+
+<section class="card">
+    @if (_loading)
+    {
+        <p>Loading reader...</p>
+    }
+    else if (_book is null || !_book.Formats.Any(x => x.FormatType == "text"))
+    {
+        <h1>Text Format Not Available</h1>
+        <p>This book does not have a text version yet.</p>
+    }
+    else
+    {
+        <div class="section-header">
+            <div>
+                <h1>@_book.Title</h1>
+                <p class="subtitle">Chapter @_checkpoint.CurrentChapter, page @_checkpoint.CurrentPage</p>
+            </div>
+            <a class="btn btn-link" href="/listen/@BookId">Switch To Audio</a>
+        </div>
+
+        <div class="progress-row">
+            <label>Reading Progress</label>
+            <progress value="@_checkpoint.ProgressPercent" max="100"></progress>
+            <span>@_checkpoint.ProgressPercent.ToString("0.0")%</span>
+        </div>
+
+        <article class="reader-surface">
+            <h3>Chapter @_checkpoint.CurrentChapter</h3>
+            <p>
+                This is a placeholder EPUB reading surface. In current phase, it models chapter/page navigation and
+                persistence of position with offline checkpoints and API sync.
+            </p>
+            <p class="meta">Current page: @_checkpoint.CurrentPage / @PagesPerChapter</p>
+        </article>
+
+        <div class="player-controls">
+            <button class="btn" @onclick="PrevPage">Prev Page</button>
+            <button class="btn" @onclick="NextPage">Next Page</button>
+            <button class="btn" @onclick="PrevChapter">Prev Chapter</button>
+            <button class="btn" @onclick="NextChapter">Next Chapter</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_status))
+        {
+            <p class="status">@_status</p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter]
+    public int BookId { get; set; }
+
+    private const int UserId = 1;
+    private const int TotalChapters = 20;
+    private const int PagesPerChapter = 30;
+
+    private bool _loading = true;
+    private BookDetailsDto? _book;
+    private ReaderSessionCheckpoint _checkpoint = new();
+    private string _status = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _status = string.Empty;
+
+        _book = await ApiClient.GetBookDetailsAsync(BookId);
+        _checkpoint = await SessionService.LoadAsync(UserId, BookId, "text");
+        NormalizeCheckpoint();
+
+        await SessionService.MarkStartedAsync(_checkpoint);
+        await SaveAsync(syncRemote: true);
+        _loading = false;
+    }
+
+    private async Task PrevPage()
+    {
+        if (_checkpoint.CurrentPage > 1)
+        {
+            _checkpoint.CurrentPage--;
+        }
+        else if (_checkpoint.CurrentChapter > 1)
+        {
+            _checkpoint.CurrentChapter--;
+            _checkpoint.CurrentPage = PagesPerChapter;
+        }
+
+        await SaveAsync(syncRemote: true);
+    }
+
+    private async Task NextPage()
+    {
+        if (_checkpoint.CurrentPage < PagesPerChapter)
+        {
+            _checkpoint.CurrentPage++;
+        }
+        else if (_checkpoint.CurrentChapter < TotalChapters)
+        {
+            _checkpoint.CurrentChapter++;
+            _checkpoint.CurrentPage = 1;
+        }
+
+        await SaveAsync(syncRemote: true);
+    }
+
+    private async Task PrevChapter()
+    {
+        _checkpoint.CurrentChapter = Math.Max(1, _checkpoint.CurrentChapter - 1);
+        _checkpoint.CurrentPage = Math.Min(PagesPerChapter, _checkpoint.CurrentPage);
+        await SaveAsync(syncRemote: true);
+    }
+
+    private async Task NextChapter()
+    {
+        _checkpoint.CurrentChapter = Math.Min(TotalChapters, _checkpoint.CurrentChapter + 1);
+        _checkpoint.CurrentPage = Math.Min(PagesPerChapter, _checkpoint.CurrentPage);
+        await SaveAsync(syncRemote: true);
+    }
+
+    private async Task SaveAsync(bool syncRemote)
+    {
+        var totalPages = TotalChapters * PagesPerChapter;
+        var currentPageIndex = ((_checkpoint.CurrentChapter - 1) * PagesPerChapter) + _checkpoint.CurrentPage;
+
+        _checkpoint.PositionRef = $"c{_checkpoint.CurrentChapter}:p{_checkpoint.CurrentPage}";
+        _checkpoint.ProgressPercent = Math.Clamp((currentPageIndex / (float)totalPages) * 100, 0, 100);
+
+        await SessionService.SaveCheckpointAsync(_checkpoint, syncRemote);
+        _status = syncRemote
+            ? $"Saved at {_checkpoint.UpdatedAtUtc:u}"
+            : "Saved locally.";
+
+        if (_checkpoint.ProgressPercent >= 100)
+        {
+            await SessionService.MarkCompletedAsync(_checkpoint);
+        }
+    }
+
+    private void NormalizeCheckpoint()
+    {
+        _checkpoint.UserId = UserId;
+        _checkpoint.BookId = BookId;
+        _checkpoint.FormatType = "text";
+        _checkpoint.CurrentChapter = Math.Clamp(_checkpoint.CurrentChapter, 1, TotalChapters);
+        _checkpoint.CurrentPage = Math.Clamp(_checkpoint.CurrentPage, 1, PagesPerChapter);
+    }
+}

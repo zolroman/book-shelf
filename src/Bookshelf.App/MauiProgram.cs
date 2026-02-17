@@ -16,6 +16,8 @@ public static class MauiProgram
 
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddSingleton<IOfflineCacheService, OfflineCacheService>();
+        builder.Services.AddSingleton<ISessionCheckpointStore, SqliteSessionCheckpointStore>();
+        builder.Services.AddSingleton<IReadingSessionService, ReadingSessionService>();
         builder.Services.AddSingleton(_ => new HttpClient
         {
             BaseAddress = ResolveApiBaseAddress(),

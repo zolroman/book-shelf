@@ -27,11 +27,18 @@ Base URL: `http://localhost:5281`
 - `GET /api/progress?userId=1&bookId=1&formatType=text`
 - `PUT /api/progress`
   - body: `{ "userId":1, "bookId":1, "formatType":"text", "positionRef":"ch3", "progressPercent":31.2 }`
+  - usage:
+    - text position format: `c{chapter}:p{page}` (example: `c3:p12`);
+    - audio position format: seconds as string (example: `245`).
 
 ## History
 - `GET /api/history?userId=1&bookId=1`
 - `POST /api/history`
   - body: `{ "userId":1, "bookId":1, "formatType":"audio", "eventType":"progress", "positionRef":"00:42:12", "eventAtUtc":null }`
+  - common `eventType` values:
+    - `started`
+    - `progress`
+    - `completed`
 
 ## Downloads
 - `GET /api/downloads/candidates?query=dune&maxItems=10`

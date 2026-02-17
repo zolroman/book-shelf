@@ -26,6 +26,14 @@
 - App baseline (Phase 5 skeleton):
   - MAUI Hybrid Blazor app with tabs/pages: dashboard, shelf, search, history;
   - API client + offline JSON cache fallback.
+- Phase 6 reader/audio baseline:
+  - new client pages:
+    - `/read/{bookId}` for text navigation (chapter/page model);
+    - `/listen/{bookId}` for audio controls (play/pause/seek/speed) with timer-driven playback simulation;
+  - unified client session service (`ReadingSessionService`) for text/audio checkpoints;
+  - checkpoint persistence in local SQLite (`bookshelf_sessions.db`) with offline restore across app restart;
+  - progress sync via `/api/progress` and history events via `/api/history`;
+  - independent positions for text and audio formats of the same book.
 - Tests:
   - domain/infrastructure/api unit tests are green locally.
 
@@ -34,11 +42,11 @@
 - Production validation against live FantLab schema variations and rate limits.
 - Production hardening of Jackett/qBittorrent integrations (auth/availability/rate limits across real deployments).
 - OIDC integration with Authelia.
-- Reader engine and full audio player implementation.
+- Full EPUB rendering engine and native background audio playback integration.
 - Offline sync conflict resolution across multiple devices.
 
 ## Verification snapshot
 - Backend build: success.
 - MAUI Windows build: success.
 - Unit tests: success.
-- API smoke test: success (`books`, `search`, `library add/list`, `downloads candidates/start/status/assets`).
+- API smoke test: success (`books`, `search`, `library add/list`, `downloads candidates/start/status/assets`, `progress text/audio`, `history started/completed`).

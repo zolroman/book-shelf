@@ -27,6 +27,16 @@
                     <p class="meta">Rating: @(item.Book.CommunityRating?.ToString("0.0") ?? "-")</p>
                     <p class="meta">Formats: @(item.Book.HasText ? "text" : "") @(item.Book.HasAudio ? " audio" : "")</p>
                     <span class="chip">@item.LibraryItem.Status</span>
+                    <div class="book-actions">
+                        @if (item.Book.HasText)
+                        {
+                            <a class="btn btn-link" href="/read/@item.Book.Id">Read</a>
+                        }
+                        @if (item.Book.HasAudio)
+                        {
+                            <a class="btn btn-link" href="/listen/@item.Book.Id">Listen</a>
+                        }
+                    </div>
                 </article>
             }
         </div>

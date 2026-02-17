@@ -32,7 +32,17 @@
                     <p class="meta">@string.Join(", ", result.Authors.Select(a => a.Name))</p>
                     <p class="meta">Rating: @(result.CommunityRating?.ToString("0.0") ?? "-")</p>
                     <p class="meta">Formats: @(result.HasText ? "text" : "") @(result.HasAudio ? " audio" : "")</p>
-                    <button class="btn" @onclick="() => AddToShelfAsync(result.Id)">Add To Shelf</button>
+                    <div class="book-actions">
+                        <button class="btn" @onclick="() => AddToShelfAsync(result.Id)">Add To Shelf</button>
+                        @if (result.HasText)
+                        {
+                            <a class="btn btn-link" href="/read/@result.Id">Read</a>
+                        }
+                        @if (result.HasAudio)
+                        {
+                            <a class="btn btn-link" href="/listen/@result.Id">Listen</a>
+                        }
+                    </div>
                 </article>
             }
         </div>

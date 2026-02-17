@@ -1,0 +1,248 @@
+@page "/listen/{BookId:int}"
+@implements IAsyncDisposable
+@inject IBookshelfApiClient ApiClient
+@inject IReadingSessionService SessionService
+
+<section class="card">
+    @if (_loading)
+    {
+        <p>Loading player...</p>
+    }
+    else if (_book is null || !_book.Formats.Any(x => x.FormatType == "audio"))
+    {
+        <h1>Audio Format Not Available</h1>
+        <p>This book does not have an audio version yet.</p>
+    }
+    else
+    {
+        <div class="section-header">
+            <div>
+                <h1>@_book.Title</h1>
+                <p class="subtitle">Audio position: @FormatSeconds(_checkpoint.AudioPositionSeconds) / @FormatSeconds(_durationSeconds)</p>
+            </div>
+            <a class="btn btn-link" href="/read/@BookId">Switch To Text</a>
+        </div>
+
+        <div class="progress-row">
+            <label>Listening Progress</label>
+            <progress value="@_checkpoint.ProgressPercent" max="100"></progress>
+            <span>@_checkpoint.ProgressPercent.ToString("0.0")%</span>
+        </div>
+
+        <div class="slider-row">
+            <input type="range" min="0" max="@_durationSeconds" value="@_checkpoint.AudioPositionSeconds" @oninput="OnSeek" />
+        </div>
+
+        <div class="player-controls">
+            <button class="btn" @onclick="SeekBack">-15s</button>
+            <button class="btn" @onclick="TogglePlayPause">@(_checkpoint.IsPlaying ? "Pause" : "Play")</button>
+            <button class="btn" @onclick="SeekForward">+15s</button>
+            <select value="@_checkpoint.AudioSpeed" @onchange="OnSpeedChanged">
+                @foreach (var speed in _speedOptions)
+                {
+                    <option value="@speed">@speed.ToString("0.##")x</option>
+                }
+            </select>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_status))
+        {
+            <p class="status">@_status</p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter]
+    public int BookId { get; set; }
+
+    private const int UserId = 1;
+    private static readonly float[] _speedOptions = [0.75f, 1f, 1.25f, 1.5f, 2f];
+
+    private bool _loading = true;
+    private BookDetailsDto? _book;
+    private ReaderSessionCheckpoint _checkpoint = new();
+    private int _durationSeconds = 3600;
+    private string _status = string.Empty;
+    private CancellationTokenSource? _playbackLoopCts;
+    private Task? _playbackLoopTask;
+    private int _ticksSinceLastSync;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _status = string.Empty;
+        await StopPlaybackLoopAsync();
+
+        _book = await ApiClient.GetBookDetailsAsync(BookId);
+        var audioFormat = _book?.Formats.FirstOrDefault(x => x.FormatType == "audio");
+        _durationSeconds = Math.Max(audioFormat?.DurationSeconds ?? 3600, 60);
+
+        _checkpoint = await SessionService.LoadAsync(UserId, BookId, "audio");
+        NormalizeCheckpoint();
+
+        await SessionService.MarkStartedAsync(_checkpoint);
+        await SaveAsync(syncRemote: true);
+        _loading = false;
+    }
+
+    private async Task TogglePlayPause()
+    {
+        _checkpoint.IsPlaying = !_checkpoint.IsPlaying;
+        if (_checkpoint.IsPlaying)
+        {
+            StartPlaybackLoop();
+        }
+        else
+        {
+            await SaveAsync(syncRemote: true);
+        }
+    }
+
+    private async Task SeekBack()
+    {
+        _checkpoint.AudioPositionSeconds = Math.Max(0, _checkpoint.AudioPositionSeconds - 15);
+        await SaveAsync(syncRemote: true);
+    }
+
+    private async Task SeekForward()
+    {
+        _checkpoint.AudioPositionSeconds = Math.Min(_durationSeconds, _checkpoint.AudioPositionSeconds + 15);
+        await SaveAsync(syncRemote: true);
+    }
+
+    private async Task OnSeek(ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var value))
+        {
+            return;
+        }
+
+        _checkpoint.AudioPositionSeconds = Math.Clamp(value, 0, _durationSeconds);
+        await SaveAsync(syncRemote: true);
+    }
+
+    private async Task OnSpeedChanged(ChangeEventArgs args)
+    {
+        if (!float.TryParse(args.Value?.ToString(), out var speed))
+        {
+            return;
+        }
+
+        _checkpoint.AudioSpeed = _speedOptions.OrderBy(x => Math.Abs(x - speed)).First();
+        await SaveAsync(syncRemote: false);
+    }
+
+    private void StartPlaybackLoop()
+    {
+        _playbackLoopCts?.Cancel();
+        _playbackLoopCts = new CancellationTokenSource();
+        _playbackLoopTask = RunPlaybackLoopAsync(_playbackLoopCts.Token);
+    }
+
+    private async Task RunPlaybackLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (!_checkpoint.IsPlaying)
+                {
+                    continue;
+                }
+
+                var delta = Math.Max(1, (int)Math.Round(_checkpoint.AudioSpeed));
+                _checkpoint.AudioPositionSeconds = Math.Min(_durationSeconds, _checkpoint.AudioPositionSeconds + delta);
+                _ticksSinceLastSync++;
+
+                var syncNow = _ticksSinceLastSync >= 5 || _checkpoint.AudioPositionSeconds >= _durationSeconds;
+                await SaveAsync(syncNow);
+                if (syncNow)
+                {
+                    _ticksSinceLastSync = 0;
+                }
+
+                if (_checkpoint.AudioPositionSeconds >= _durationSeconds)
+                {
+                    _checkpoint.IsPlaying = false;
+                    await SessionService.MarkCompletedAsync(_checkpoint, cancellationToken);
+                    _status = "Playback completed.";
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected on navigation/stop
+        }
+    }
+
+    private async Task SaveAsync(bool syncRemote)
+    {
+        _checkpoint.PositionRef = _checkpoint.AudioPositionSeconds.ToString();
+        _checkpoint.ProgressPercent = Math.Clamp((_checkpoint.AudioPositionSeconds / (float)_durationSeconds) * 100, 0, 100);
+        _checkpoint.AudioDurationSeconds = _durationSeconds;
+
+        await SessionService.SaveCheckpointAsync(_checkpoint, syncRemote);
+        _status = syncRemote
+            ? $"Synced at {_checkpoint.UpdatedAtUtc:u}"
+            : "Saved locally.";
+
+        if (_checkpoint.ProgressPercent >= 100)
+        {
+            await SessionService.MarkCompletedAsync(_checkpoint);
+        }
+    }
+
+    private void NormalizeCheckpoint()
+    {
+        _checkpoint.UserId = UserId;
+        _checkpoint.BookId = BookId;
+        _checkpoint.FormatType = "audio";
+        _checkpoint.AudioDurationSeconds = _durationSeconds;
+        _checkpoint.AudioSpeed = _speedOptions.Contains(_checkpoint.AudioSpeed) ? _checkpoint.AudioSpeed : 1f;
+        _checkpoint.AudioPositionSeconds = Math.Clamp(_checkpoint.AudioPositionSeconds, 0, _durationSeconds);
+    }
+
+    private static string FormatSeconds(int totalSeconds)
+    {
+        var span = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
+        return span.TotalHours >= 1
+            ? span.ToString(@"hh\:mm\:ss")
+            : span.ToString(@"mm\:ss");
+    }
+
+    private async Task StopPlaybackLoopAsync()
+    {
+        if (_playbackLoopCts is null)
+        {
+            return;
+        }
+
+        _playbackLoopCts.Cancel();
+        try
+        {
+            if (_playbackLoopTask is not null)
+            {
+                await _playbackLoopTask;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // ignore
+        }
+        finally
+        {
+            _playbackLoopCts.Dispose();
+            _playbackLoopCts = null;
+            _playbackLoopTask = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopPlaybackLoopAsync();
+    }
+}
