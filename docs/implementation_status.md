@@ -1,0 +1,33 @@
+# Implementation Status
+
+## Completed in this iteration
+- Phase 0 baseline scaffold:
+  - solution/projects created;
+  - repository-level settings and `.gitignore`;
+  - CI workflow (`.github/workflows/ci.yml`).
+- Phase 1 domain baseline:
+  - entities and enums for books, formats, library, downloads, progress, history, local assets;
+  - core invariants (progress/rating bounds, download status transitions).
+- Phase 2 API baseline:
+  - controllers for auth, books, library, search, downloads, progress, history, assets;
+  - request parsing and exception middleware;
+  - API contracts draft in `docs/api_contracts.md`.
+- App baseline (Phase 5 skeleton):
+  - MAUI Hybrid Blazor app with tabs/pages: dashboard, shelf, search, history;
+  - API client + offline JSON cache fallback.
+- Tests:
+  - domain/infrastructure/api unit tests are green locally.
+
+## Not completed yet (next iterations)
+- PostgreSQL persistence and EF migrations.
+- Real FantLab adapter and resilient provider integration.
+- Real Jackett + qBittorrent orchestration.
+- OIDC integration with Authelia.
+- Reader engine and full audio player implementation.
+- Offline sync conflict resolution across multiple devices.
+
+## Verification snapshot
+- Backend build: success.
+- MAUI Windows build: success.
+- Unit tests: success.
+- API smoke test: success (`books`, `search`, `library add/list`).
