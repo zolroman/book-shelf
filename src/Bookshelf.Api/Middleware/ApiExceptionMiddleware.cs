@@ -5,23 +5,20 @@ namespace Bookshelf.Api.Middleware;
 
 public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExceptionMiddleware> logger)
 {
-    private readonly RequestDelegate _next = next;
-    private readonly ILogger<ApiExceptionMiddleware> _logger = logger;
-
     public async Task Invoke(HttpContext context)
     {
         try
         {
-            await _next(context);
+            await next(context);
         }
         catch (ArgumentException exception)
         {
-            _logger.LogWarning(exception, "Request validation failed.");
+            logger.LogWarning(exception, "Request validation failed.");
             await WriteErrorAsync(context, HttpStatusCode.BadRequest, exception.Message);
         }
         catch (InvalidOperationException exception)
         {
-            _logger.LogWarning(exception, "Invalid operation.");
+            logger.LogWarning(exception, "Invalid operation.");
             await WriteErrorAsync(context, HttpStatusCode.Conflict, exception.Message);
         }
     }

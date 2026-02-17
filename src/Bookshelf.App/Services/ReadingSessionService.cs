@@ -11,11 +11,6 @@ public sealed class ReadingSessionService(
     IOfflineSyncService offlineSyncService,
     ILogger<ReadingSessionService> logger) : IReadingSessionService
 {
-    private readonly IBookshelfApiClient _apiClient = apiClient;
-    private readonly ISessionCheckpointStore _checkpointStore = checkpointStore;
-    private readonly IOfflineSyncService _offlineSyncService = offlineSyncService;
-    private readonly ILogger<ReadingSessionService> _logger = logger;
-
     public async Task<ReaderSessionCheckpoint> LoadAsync(
         int userId,
         int bookId,
@@ -23,9 +18,9 @@ public sealed class ReadingSessionService(
         CancellationToken cancellationToken = default)
     {
         var normalizedFormat = NormalizeFormat(formatType);
-        var localCheckpoint = await _checkpointStore.GetAsync(userId, bookId, normalizedFormat, cancellationToken);
+        var localCheckpoint = await checkpointStore.GetAsync(userId, bookId, normalizedFormat, cancellationToken);
 
-        var remote = await _apiClient.GetProgressAsync(userId, bookId, normalizedFormat, cancellationToken);
+        var remote = await apiClient.GetProgressAsync(userId, bookId, normalizedFormat, cancellationToken);
         if (remote is null)
         {
             return localCheckpoint ?? CreateDefault(userId, bookId, normalizedFormat);
@@ -46,7 +41,7 @@ public sealed class ReadingSessionService(
         }
 
         var merged = SelectNewer(localCheckpoint, remoteCheckpoint);
-        await _checkpointStore.UpsertAsync(merged, cancellationToken);
+        await checkpointStore.UpsertAsync(merged, cancellationToken);
         return merged;
     }
 
@@ -58,14 +53,14 @@ public sealed class ReadingSessionService(
         checkpoint.UpdatedAtUtc = DateTime.UtcNow;
         checkpoint.FormatType = NormalizeFormat(checkpoint.FormatType);
 
-        await _checkpointStore.UpsertAsync(checkpoint, cancellationToken);
+        await checkpointStore.UpsertAsync(checkpoint, cancellationToken);
 
         if (!syncRemote)
         {
             return;
         }
 
-        _ = await _offlineSyncService.QueueProgressAsync(
+        _ = await offlineSyncService.QueueProgressAsync(
             new UpsertProgressRequest(
                 checkpoint.UserId,
                 checkpoint.BookId,
@@ -93,7 +88,7 @@ public sealed class ReadingSessionService(
             checkpoint.PositionRef,
             DateTime.UtcNow);
 
-        var result = await _offlineSyncService.QueueHistoryEventAsync(request, cancellationToken);
+        var result = await offlineSyncService.QueueHistoryEventAsync(request, cancellationToken);
         checkpoint.StartedEventSent = result || checkpoint.StartedEventSent;
         await SaveCheckpointAsync(checkpoint, syncRemote: true, cancellationToken);
     }
@@ -118,7 +113,7 @@ public sealed class ReadingSessionService(
             checkpoint.PositionRef,
             DateTime.UtcNow);
 
-        var result = await _offlineSyncService.QueueHistoryEventAsync(request, cancellationToken);
+        var result = await offlineSyncService.QueueHistoryEventAsync(request, cancellationToken);
         checkpoint.CompletedEventSent = result || checkpoint.CompletedEventSent;
         await SaveCheckpointAsync(checkpoint, syncRemote: true, cancellationToken);
     }
@@ -190,7 +185,7 @@ public sealed class ReadingSessionService(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Unable to parse text position '{PositionRef}'.", positionRef);
+            logger.LogWarning(exception, "Unable to parse text position '{PositionRef}'.", positionRef);
             checkpoint.CurrentChapter = 1;
             checkpoint.CurrentPage = 1;
             checkpoint.PositionRef = "c1:p1";

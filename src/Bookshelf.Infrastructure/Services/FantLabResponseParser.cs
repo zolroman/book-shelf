@@ -1,188 +1,86 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Bookshelf.Infrastructure.Models;
 
 namespace Bookshelf.Infrastructure.Services;
 
 internal static class FantLabResponseParser
 {
-    private static readonly string[] ItemsContainerKeys = ["items", "results", "works", "books", "data"];
-
     public static IReadOnlyList<ImportedBookSeed> Parse(string json)
     {
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-        var items = ResolveItems(root);
+        var items = JsonSerializer.Deserialize<List<FantLabWork>>(json, SerializerOptions) ?? [];
+        var results = new List<ImportedBookSeed>(items.Count);
 
-        var results = new List<ImportedBookSeed>();
         foreach (var item in items)
         {
-            if (item.ValueKind != JsonValueKind.Object)
+            var title = item.RusName?.Trim();
+            if (string.IsNullOrWhiteSpace(title))
             {
-                continue;
+                title = item.Name?.Trim();
             }
 
-            var title = GetString(item, "title", "name", "work_name", "ru_name");
             if (string.IsNullOrWhiteSpace(title))
             {
                 continue;
             }
 
-            var originalTitle = GetString(item, "original_title", "originalName", "name_orig", "en_name") ?? title;
-            var year = GetNullableInt(item, "year", "publish_year");
-            var rating = GetNullableFloat(item, "rating", "avg_mark", "mark");
-            var coverUrl = GetString(item, "cover", "cover_url", "img") ?? string.Empty;
-            var description = GetString(item, "description", "annotation", "summary") ?? string.Empty;
-            var authors = ExtractAuthors(item);
-            var (hasText, hasAudio) = ExtractFormats(item);
+            var originalTitle = item.Name?.Trim() ?? title;
+            var authors = SplitAuthors(item.AllAutorRusName) ?? SplitAuthors(item.AllAutorName) ?? [];
 
             results.Add(new ImportedBookSeed(
-                title.Trim(),
-                originalTitle.Trim(),
-                year,
-                rating,
-                coverUrl,
-                description,
+                title,
+                originalTitle,
+                item.Year,
+                ParseMidmark(item.Midmark),
+                string.Empty,
+                string.Empty,
                 authors,
-                hasText,
-                hasAudio));
+                true,
+                false));
         }
 
         return results;
     }
 
-    private static IReadOnlyList<JsonElement> ResolveItems(JsonElement root)
+    private static IReadOnlyList<string>? SplitAuthors(string? authors)
     {
-        if (root.ValueKind == JsonValueKind.Array)
+        if (string.IsNullOrWhiteSpace(authors))
         {
-            return root.EnumerateArray().ToList();
+            return null;
         }
 
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            return [];
-        }
-
-        foreach (var key in ItemsContainerKeys)
-        {
-            if (root.TryGetProperty(key, out var nestedArray) && nestedArray.ValueKind == JsonValueKind.Array)
-            {
-                return nestedArray.EnumerateArray().ToList();
-            }
-        }
-
-        if (GetString(root, "title", "name", "work_name", "ru_name") is not null)
-        {
-            return [root];
-        }
-
-        return [];
+        return authors
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
     }
 
-    private static (bool HasText, bool HasAudio) ExtractFormats(JsonElement item)
+    private static float? ParseMidmark(JsonElement? midmark)
     {
-        var hasText = GetNullableBool(item, "has_text", "text_available");
-        var hasAudio = GetNullableBool(item, "has_audio", "audio_available");
-
-        if (item.TryGetProperty("formats", out var formats) && formats.ValueKind == JsonValueKind.Array)
+        if (midmark is null)
         {
-            foreach (var format in formats.EnumerateArray())
-            {
-                if (format.ValueKind == JsonValueKind.String)
-                {
-                    var value = format.GetString();
-                    if (string.Equals(value, "text", StringComparison.OrdinalIgnoreCase))
-                    {
-                        hasText = true;
-                    }
-                    else if (string.Equals(value, "audio", StringComparison.OrdinalIgnoreCase))
-                    {
-                        hasAudio = true;
-                    }
-                }
-            }
+            return null;
         }
 
-        return (hasText ?? true, hasAudio ?? false);
+        var element = midmark.Value;
+        return element.ValueKind switch
+        {
+            JsonValueKind.Number => element.TryGetSingle(out var value) ? value : null,
+            JsonValueKind.String => float.TryParse(element.GetString(), out var value) ? value : null,
+            JsonValueKind.Array => ReadFirstNumber(element),
+            _ => null
+        };
     }
 
-    private static IReadOnlyList<string> ExtractAuthors(JsonElement item)
+    private static float? ReadFirstNumber(JsonElement array)
     {
-        var authors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        if (item.TryGetProperty("author", out var singleAuthor))
+        foreach (var item in array.EnumerateArray())
         {
-            var name = singleAuthor.ValueKind switch
-            {
-                JsonValueKind.String => singleAuthor.GetString(),
-                JsonValueKind.Object => GetString(singleAuthor, "name", "author_name"),
-                _ => null
-            };
-
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                authors.Add(name.Trim());
-            }
-        }
-
-        if (item.TryGetProperty("authors", out var authorsElement) && authorsElement.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var author in authorsElement.EnumerateArray())
-            {
-                string? name = author.ValueKind switch
-                {
-                    JsonValueKind.String => author.GetString(),
-                    JsonValueKind.Object => GetString(author, "name", "author_name"),
-                    _ => null
-                };
-
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    authors.Add(name.Trim());
-                }
-            }
-        }
-
-        return authors.ToList();
-    }
-
-    private static string? GetString(JsonElement element, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (!element.TryGetProperty(key, out var property) || property.ValueKind == JsonValueKind.Null)
-            {
-                continue;
-            }
-
-            if (property.ValueKind == JsonValueKind.String)
-            {
-                return property.GetString();
-            }
-
-            if (property.ValueKind is JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
-            {
-                return property.ToString();
-            }
-        }
-
-        return null;
-    }
-
-    private static int? GetNullableInt(JsonElement element, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (!element.TryGetProperty(key, out var property) || property.ValueKind == JsonValueKind.Null)
-            {
-                continue;
-            }
-
-            if (property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var value))
+            if (item.ValueKind == JsonValueKind.Number && item.TryGetSingle(out var value))
             {
                 return value;
             }
 
-            if (property.ValueKind == JsonValueKind.String && int.TryParse(property.GetString(), out value))
+            if (item.ValueKind == JsonValueKind.String && float.TryParse(item.GetString(), out value))
             {
                 return value;
             }
@@ -191,54 +89,16 @@ internal static class FantLabResponseParser
         return null;
     }
 
-    private static float? GetNullableFloat(JsonElement element, params string[] keys)
+    private static readonly JsonSerializerOptions SerializerOptions = new()
     {
-        foreach (var key in keys)
-        {
-            if (!element.TryGetProperty(key, out var property) || property.ValueKind == JsonValueKind.Null)
-            {
-                continue;
-            }
+        PropertyNameCaseInsensitive = true
+    };
 
-            if (property.ValueKind == JsonValueKind.Number && property.TryGetSingle(out var value))
-            {
-                return value;
-            }
-
-            if (property.ValueKind == JsonValueKind.String && float.TryParse(property.GetString(), out value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool? GetNullableBool(JsonElement element, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (!element.TryGetProperty(key, out var property) || property.ValueKind == JsonValueKind.Null)
-            {
-                continue;
-            }
-
-            if (property.ValueKind == JsonValueKind.True)
-            {
-                return true;
-            }
-
-            if (property.ValueKind == JsonValueKind.False)
-            {
-                return false;
-            }
-
-            if (property.ValueKind == JsonValueKind.String && bool.TryParse(property.GetString(), out var value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
+    private sealed record FantLabWork(
+        [property: JsonPropertyName("rusname")] string? RusName,
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("year")] int? Year,
+        [property: JsonPropertyName("midmark")] JsonElement? Midmark,
+        [property: JsonPropertyName("all_autor_rusname")] string? AllAutorRusName,
+        [property: JsonPropertyName("all_autor_name")] string? AllAutorName);
 }

@@ -9,8 +9,6 @@ namespace Bookshelf.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class DownloadsController(IDownloadService downloadService) : ControllerBase
 {
-    private readonly IDownloadService _downloadService = downloadService;
-
     [HttpGet("candidates")]
     public async Task<ActionResult<IReadOnlyList<TorrentCandidateDto>>> GetCandidates(
         [FromQuery] string query,
@@ -22,7 +20,7 @@ public sealed class DownloadsController(IDownloadService downloadService) : Cont
             return BadRequest("Query is required.");
         }
 
-        var candidates = await _downloadService.SearchCandidatesAsync(query, maxItems, cancellationToken);
+        var candidates = await downloadService.SearchCandidatesAsync(query, maxItems, cancellationToken);
         return Ok(candidates.Select(x => x.ToDto()).ToList());
     }
 
@@ -31,14 +29,14 @@ public sealed class DownloadsController(IDownloadService downloadService) : Cont
         [FromQuery] int userId = 1,
         CancellationToken cancellationToken = default)
     {
-        var jobs = await _downloadService.GetJobsAsync(userId, cancellationToken);
+        var jobs = await downloadService.GetJobsAsync(userId, cancellationToken);
         return Ok(jobs.Select(x => x.ToDto()).ToList());
     }
 
     [HttpGet("{jobId:int}")]
     public async Task<ActionResult<DownloadJobDto>> GetById(int jobId, CancellationToken cancellationToken = default)
     {
-        var job = await _downloadService.GetJobAsync(jobId, cancellationToken);
+        var job = await downloadService.GetJobAsync(jobId, cancellationToken);
         if (job is null)
         {
             return NotFound();
@@ -52,14 +50,14 @@ public sealed class DownloadsController(IDownloadService downloadService) : Cont
         [FromBody] StartDownloadRequest request,
         CancellationToken cancellationToken = default)
     {
-        var started = await _downloadService.StartAsync(request.UserId, request.BookFormatId, request.Source, cancellationToken);
+        var started = await downloadService.StartAsync(request.UserId, request.BookFormatId, request.Source, cancellationToken);
         return Ok(started.ToDto());
     }
 
     [HttpPost("{jobId:int}/cancel")]
     public async Task<ActionResult<DownloadJobDto>> Cancel(int jobId, CancellationToken cancellationToken = default)
     {
-        var canceled = await _downloadService.CancelAsync(jobId, cancellationToken);
+        var canceled = await downloadService.CancelAsync(jobId, cancellationToken);
         if (canceled is null)
         {
             return NotFound();

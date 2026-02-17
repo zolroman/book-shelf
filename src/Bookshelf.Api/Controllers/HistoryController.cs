@@ -10,15 +10,13 @@ namespace Bookshelf.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class HistoryController(IBookshelfRepository repository) : ControllerBase
 {
-    private readonly IBookshelfRepository _repository = repository;
-
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<HistoryEventDto>>> GetHistory(
         [FromQuery] int userId = 1,
         [FromQuery] int? bookId = null,
         CancellationToken cancellationToken = default)
     {
-        var history = await _repository.GetHistoryEventsAsync(userId, bookId, cancellationToken);
+        var history = await repository.GetHistoryEventsAsync(userId, bookId, cancellationToken);
         return Ok(history.Select(x => x.ToDto()).ToList());
     }
 
@@ -37,7 +35,7 @@ public sealed class HistoryController(IBookshelfRepository repository) : Control
             return BadRequest("Unknown event type.");
         }
 
-        var historyEvent = await _repository.AddHistoryEventAsync(
+        var historyEvent = await repository.AddHistoryEventAsync(
             request.UserId,
             request.BookId,
             parsedFormat,

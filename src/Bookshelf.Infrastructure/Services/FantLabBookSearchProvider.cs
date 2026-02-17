@@ -14,11 +14,6 @@ public sealed class FantLabBookSearchProvider(
     IOptions<FantLabSearchOptions> options,
     ILogger<FantLabBookSearchProvider> logger) : IBookSearchProvider
 {
-    private readonly IBookshelfRepository _repository = repository;
-    private readonly IMemoryCache _cache = cache;
-    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
-    private readonly IOptions<FantLabSearchOptions> _options = options;
-    private readonly ILogger<FantLabBookSearchProvider> _logger = logger;
     private readonly object _stateLock = new();
 
     private int _consecutiveFailures;
@@ -33,14 +28,14 @@ public sealed class FantLabBookSearchProvider(
 
         var normalizedQuery = query.Trim();
         var cacheKey = $"search:{normalizedQuery.ToLowerInvariant()}";
-        if (_cache.TryGetValue<IReadOnlyList<Book>>(cacheKey, out var cached) && cached is not null)
-        {
-            return cached;
-        }
+        // if (cache.TryGetValue<IReadOnlyList<Book>>(cacheKey, out var cached) && cached is not null)
+        // {
+        //     return cached;
+        // }
 
-        var localResults = await _repository.GetBooksAsync(normalizedQuery, null, cancellationToken);
-        var settings = _options.Value;
-
+        var localResults = await repository.GetBooksAsync(normalizedQuery, null, cancellationToken);
+        var settings = options.Value;
+        
         if (!settings.Enabled || IsCircuitOpen())
         {
             Cache(cacheKey, localResults, settings.CacheTtlMinutes);
@@ -52,19 +47,18 @@ public sealed class FantLabBookSearchProvider(
             var importedSeeds = await FetchExternalSeedsAsync(normalizedQuery, settings, cancellationToken);
             foreach (var seed in importedSeeds)
             {
-                await _repository.UpsertImportedBookAsync(seed, cancellationToken);
+                await repository.UpsertImportedBookAsync(seed, cancellationToken);
             }
 
             RegisterSuccess();
-            var mergedResults = await _repository.GetBooksAsync(normalizedQuery, null, cancellationToken);
+            var mergedResults = await repository.GetBooksAsync(normalizedQuery, null, cancellationToken);
             Cache(cacheKey, mergedResults, settings.CacheTtlMinutes);
             return mergedResults;
         }
         catch (Exception exception)
         {
             RegisterFailure(settings);
-            _logger.LogWarning(exception, "External search failed. Returning local search results.");
-            Cache(cacheKey, localResults, settings.CacheTtlMinutes);
+            logger.LogWarning(exception, "External search failed. Returning local search results.");
             return localResults;
         }
     }
@@ -102,7 +96,7 @@ public sealed class FantLabBookSearchProvider(
         FantLabSearchOptions settings,
         CancellationToken cancellationToken)
     {
-        var client = _httpClientFactory.CreateClient(nameof(FantLabBookSearchProvider));
+        var client = httpClientFactory.CreateClient(nameof(FantLabBookSearchProvider));
         client.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds));
 
         var requestUri = BuildRequestUri(settings, query);
@@ -122,12 +116,12 @@ public sealed class FantLabBookSearchProvider(
         var baseUrl = settings.BaseUrl.TrimEnd('/');
         var path = settings.SearchPath.TrimStart('/');
         var separator = settings.SearchPath.Contains('?') ? "&" : "?";
-        return $"{baseUrl}/{path}{separator}{settings.QueryParameter}={Uri.EscapeDataString(query)}";
+        return $"{baseUrl}/{path}{separator}{settings.QueryParameter}={Uri.EscapeDataString(query)}&onlymatches=1";
     }
 
     private void Cache(string cacheKey, IReadOnlyList<Book> value, int ttlMinutes)
     {
-        _cache.Set(cacheKey, value, TimeSpan.FromMinutes(Math.Max(1, ttlMinutes)));
+        cache.Set(cacheKey, value, TimeSpan.FromMinutes(Math.Max(1, ttlMinutes)));
     }
 
     private bool IsCircuitOpen()

@@ -10,8 +10,6 @@ namespace Bookshelf.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class ProgressController(IBookshelfRepository repository) : ControllerBase
 {
-    private readonly IBookshelfRepository _repository = repository;
-
     [HttpGet]
     public async Task<ActionResult<ProgressSnapshotDto>> GetSnapshot(
         [FromQuery] int userId,
@@ -24,7 +22,7 @@ public sealed class ProgressController(IBookshelfRepository repository) : Contro
             return BadRequest("Unknown format type.");
         }
 
-        var snapshot = await _repository.GetProgressSnapshotAsync(userId, bookId, parsedFormat, cancellationToken);
+        var snapshot = await repository.GetProgressSnapshotAsync(userId, bookId, parsedFormat, cancellationToken);
         if (snapshot is null)
         {
             return NotFound();
@@ -43,7 +41,7 @@ public sealed class ProgressController(IBookshelfRepository repository) : Contro
             return BadRequest("Unknown format type.");
         }
 
-        var snapshot = await _repository.UpsertProgressSnapshotAsync(
+        var snapshot = await repository.UpsertProgressSnapshotAsync(
             request.UserId,
             request.BookId,
             parsedFormat,

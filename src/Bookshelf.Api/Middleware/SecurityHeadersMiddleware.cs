@@ -2,8 +2,6 @@ namespace Bookshelf.Api.Middleware;
 
 public sealed class SecurityHeadersMiddleware(RequestDelegate next)
 {
-    private readonly RequestDelegate _next = next;
-
     public async Task Invoke(HttpContext context)
     {
         context.Response.OnStarting(() =>
@@ -17,6 +15,6 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next)
             return Task.CompletedTask;
         });
 
-        await _next(context);
+        await next(context);
     }
 }

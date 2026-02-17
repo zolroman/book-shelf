@@ -119,7 +119,6 @@ public class InMemoryBookshelfRepositoryTests
             repository,
             torrentSearch,
             qbClient,
-            new FixedClock(),
             NullLogger<DownloadPipelineService>.Instance);
 
         var first = await service.StartAsync(1, 1, "The Martian", CancellationToken.None);
@@ -138,7 +137,6 @@ public class InMemoryBookshelfRepositoryTests
             repository,
             torrentSearch,
             qbClient,
-            new FixedClock(),
             NullLogger<DownloadPipelineService>.Instance);
 
         var job = await service.StartAsync(1, 1, "The Martian", CancellationToken.None);
@@ -162,7 +160,6 @@ public class InMemoryBookshelfRepositoryTests
             repository,
             torrentSearch,
             qbClient,
-            new FixedClock(),
             NullLogger<DownloadPipelineService>.Instance);
 
         var job = await service.StartAsync(1, 1, "The Martian", CancellationToken.None);
@@ -235,21 +232,17 @@ public class InMemoryBookshelfRepositoryTests
 
     private sealed class FakeHttpClientFactory(HttpClient client) : IHttpClientFactory
     {
-        private readonly HttpClient _client = client;
-
-        public HttpClient CreateClient(string name) => _client;
+        public HttpClient CreateClient(string name) => client;
     }
 
     private sealed class FakeHandler(Func<HttpRequestMessage, HttpResponseMessage> factory) : HttpMessageHandler
     {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _factory = factory;
-
         public int CallCount { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             CallCount++;
-            return Task.FromResult(_factory(request));
+            return Task.FromResult(factory(request));
         }
     }
 

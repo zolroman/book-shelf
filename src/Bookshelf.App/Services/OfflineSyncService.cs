@@ -16,10 +16,6 @@ public sealed class OfflineSyncService(
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(20);
 
-    private readonly IOfflineStateStore _stateStore = stateStore;
-    private readonly IRemoteSyncApiClient _remoteSyncApiClient = remoteSyncApiClient;
-    private readonly IConnectivity _connectivity = connectivity;
-    private readonly ILogger<OfflineSyncService> _logger = logger;
     private readonly SemaphoreSlim _flushMutex = new(1, 1);
 
     private readonly object _statusSync = new();
@@ -38,7 +34,7 @@ public sealed class OfflineSyncService(
             return;
         }
 
-        _connectivity.ConnectivityChanged += OnConnectivityChanged;
+        connectivity.ConnectivityChanged += OnConnectivityChanged;
 
         _backgroundCts = new CancellationTokenSource();
         _backgroundTask = RunBackgroundFlushAsync(_backgroundCts.Token);
@@ -54,7 +50,7 @@ public sealed class OfflineSyncService(
             previous = _lastStatus;
         }
 
-        var pending = await _stateStore.GetPendingSyncOperationCountAsync(cancellationToken);
+        var pending = await stateStore.GetPendingSyncOperationCountAsync(cancellationToken);
         var status = new OfflineSyncStatus(
             IsOnline(),
             PendingBefore: pending,
@@ -72,7 +68,7 @@ public sealed class OfflineSyncService(
         await _flushMutex.WaitAsync(cancellationToken);
         try
         {
-            var pendingBefore = await _stateStore.GetPendingSyncOperationCountAsync(cancellationToken);
+            var pendingBefore = await stateStore.GetPendingSyncOperationCountAsync(cancellationToken);
             if (!IsOnline())
             {
                 var offlineStatus = new OfflineSyncStatus(
@@ -87,7 +83,7 @@ public sealed class OfflineSyncService(
                 return offlineStatus;
             }
 
-            var operations = await _stateStore.GetPendingSyncOperationsAsync(maxItems: 200, cancellationToken);
+            var operations = await stateStore.GetPendingSyncOperationsAsync(maxItems: 200, cancellationToken);
             var succeeded = 0;
             var failed = 0;
 
@@ -96,16 +92,16 @@ public sealed class OfflineSyncService(
                 var (success, error) = await TrySyncOperationAsync(operation, cancellationToken);
                 if (success)
                 {
-                    await _stateStore.MarkSyncOperationSucceededAsync(operation.Id, cancellationToken);
+                    await stateStore.MarkSyncOperationSucceededAsync(operation.Id, cancellationToken);
                     succeeded++;
                     continue;
                 }
 
-                await _stateStore.MarkSyncOperationFailedAsync(operation.Id, error ?? "Sync failed.", cancellationToken);
+                await stateStore.MarkSyncOperationFailedAsync(operation.Id, error ?? "Sync failed.", cancellationToken);
                 failed++;
             }
 
-            var pendingAfter = await _stateStore.GetPendingSyncOperationCountAsync(cancellationToken);
+            var pendingAfter = await stateStore.GetPendingSyncOperationCountAsync(cancellationToken);
             var status = new OfflineSyncStatus(
                 IsOnline: true,
                 PendingBefore: pendingBefore,
@@ -143,7 +139,7 @@ public sealed class OfflineSyncService(
         var payloadJson = JsonSerializer.Serialize(payload, JsonOptions);
         var dedupKey = $"progress:{normalizedRequest.UserId}:{normalizedRequest.BookId}:{normalizedFormat}";
 
-        await _stateStore.EnqueueSyncOperationAsync(
+        await stateStore.EnqueueSyncOperationAsync(
             SyncOperationType.ProgressUpsert,
             payloadJson,
             dedupKey,
@@ -169,7 +165,7 @@ public sealed class OfflineSyncService(
         }
 
         var payloadJson = JsonSerializer.Serialize(payload, JsonOptions);
-        await _stateStore.EnqueueSyncOperationAsync(
+        await stateStore.EnqueueSyncOperationAsync(
             SyncOperationType.HistoryAppend,
             payloadJson,
             dedupKey: null,
@@ -181,7 +177,7 @@ public sealed class OfflineSyncService(
 
     public void Dispose()
     {
-        _connectivity.ConnectivityChanged -= OnConnectivityChanged;
+        connectivity.ConnectivityChanged -= OnConnectivityChanged;
 
         try
         {
@@ -194,7 +190,7 @@ public sealed class OfflineSyncService(
         }
         catch (Exception exception)
         {
-            _logger.LogDebug(exception, "Offline sync shutdown raised an exception.");
+            logger.LogDebug(exception, "Offline sync shutdown raised an exception.");
         }
         finally
         {
@@ -238,7 +234,7 @@ public sealed class OfflineSyncService(
                         : (false, "History sync request failed.");
                 }
                 default:
-                    _logger.LogWarning(
+                    logger.LogWarning(
                         "Unknown sync operation type '{OperationType}' (id: {OperationId}). Dropping it.",
                         operation.OperationType,
                         operation.Id);
@@ -247,7 +243,7 @@ public sealed class OfflineSyncService(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(
+            logger.LogWarning(
                 exception,
                 "Sync operation {OperationId} ({OperationType}) failed.",
                 operation.Id,
@@ -263,7 +259,7 @@ public sealed class OfflineSyncService(
     {
         var request = payload.Request with { FormatType = NormalizeFormat(payload.Request.FormatType) };
 
-        var remote = await _remoteSyncApiClient.GetProgressRemoteAsync(
+        var remote = await remoteSyncApiClient.GetProgressRemoteAsync(
             request.UserId,
             request.BookId,
             request.FormatType,
@@ -271,7 +267,7 @@ public sealed class OfflineSyncService(
 
         if (remote is not null && remote.UpdatedAtUtc > payload.ClientUpdatedAtUtc)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Skipped local progress update for user {UserId}, book {BookId}, format {FormatType}: remote snapshot is newer ({RemoteUpdatedAtUtc:o} > {ClientUpdatedAtUtc:o}).",
                 request.UserId,
                 request.BookId,
@@ -282,14 +278,14 @@ public sealed class OfflineSyncService(
             return true;
         }
 
-        return await _remoteSyncApiClient.UpsertProgressRemoteAsync(request, cancellationToken);
+        return await remoteSyncApiClient.UpsertProgressRemoteAsync(request, cancellationToken);
     }
 
     private Task<bool> TrySyncHistoryEventAsync(
         QueuedHistorySyncPayload payload,
         CancellationToken cancellationToken)
     {
-        return _remoteSyncApiClient.AddHistoryEventRemoteAsync(payload.Request, cancellationToken);
+        return remoteSyncApiClient.AddHistoryEventRemoteAsync(payload.Request, cancellationToken);
     }
 
     private async Task RunBackgroundFlushAsync(CancellationToken cancellationToken)
@@ -308,7 +304,7 @@ public sealed class OfflineSyncService(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Background offline sync loop terminated unexpectedly.");
+            logger.LogWarning(exception, "Background offline sync loop terminated unexpectedly.");
         }
     }
 
@@ -323,7 +319,7 @@ public sealed class OfflineSyncService(
 
     private async Task RefreshStatusAsync(CancellationToken cancellationToken)
     {
-        var pending = await _stateStore.GetPendingSyncOperationCountAsync(cancellationToken);
+        var pending = await stateStore.GetPendingSyncOperationCountAsync(cancellationToken);
         var status = new OfflineSyncStatus(
             IsOnline(),
             PendingBefore: pending,
@@ -353,13 +349,13 @@ public sealed class OfflineSyncService(
         }
         catch (Exception exception)
         {
-            _logger.LogDebug(exception, "Offline sync status listener raised an exception.");
+            logger.LogDebug(exception, "Offline sync status listener raised an exception.");
         }
     }
 
     private bool IsOnline()
     {
-        return IsOnline(_connectivity.NetworkAccess);
+        return IsOnline(connectivity.NetworkAccess);
     }
 
     private static bool IsOnline(NetworkAccess networkAccess)

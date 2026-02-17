@@ -12,9 +12,6 @@ public sealed class QbittorrentDownloadClient(
     IOptions<QbittorrentOptions> options,
     ILogger<QbittorrentDownloadClient> logger) : IQbittorrentDownloadClient
 {
-    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
-    private readonly IOptions<QbittorrentOptions> _options = options;
-    private readonly ILogger<QbittorrentDownloadClient> _logger = logger;
     private readonly object _syncRoot = new();
     private readonly Dictionary<string, MockJobState> _mockJobs = new(StringComparer.OrdinalIgnoreCase);
 
@@ -25,7 +22,7 @@ public sealed class QbittorrentDownloadClient(
             throw new ArgumentException("Download URI is required.", nameof(downloadUri));
         }
 
-        var settings = _options.Value;
+        var settings = options.Value;
         if (!settings.Enabled)
         {
             return EnqueueMock(downloadUri, settings);
@@ -38,7 +35,7 @@ public sealed class QbittorrentDownloadClient(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "qBittorrent enqueue failed.");
+            logger.LogWarning(exception, "qBittorrent enqueue failed.");
             if (!settings.UseMockFallback)
             {
                 throw;
@@ -55,7 +52,7 @@ public sealed class QbittorrentDownloadClient(
             return ExternalDownloadStatus.Unknown;
         }
 
-        var settings = _options.Value;
+        var settings = options.Value;
 
         var mockStatus = TryGetMockStatus(externalJobId, settings);
         if (mockStatus.HasValue)
@@ -74,7 +71,7 @@ public sealed class QbittorrentDownloadClient(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "qBittorrent status lookup failed for job {ExternalJobId}.", externalJobId);
+            logger.LogWarning(exception, "qBittorrent status lookup failed for job {ExternalJobId}.", externalJobId);
             return ExternalDownloadStatus.Unknown;
         }
     }
@@ -86,7 +83,7 @@ public sealed class QbittorrentDownloadClient(
             return;
         }
 
-        var settings = _options.Value;
+        var settings = options.Value;
         lock (_syncRoot)
         {
             if (_mockJobs.TryGetValue(externalJobId, out var mockJob))
@@ -107,7 +104,7 @@ public sealed class QbittorrentDownloadClient(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "qBittorrent cancel failed for job {ExternalJobId}.", externalJobId);
+            logger.LogWarning(exception, "qBittorrent cancel failed for job {ExternalJobId}.", externalJobId);
             if (!settings.UseMockFallback)
             {
                 throw;
@@ -162,7 +159,7 @@ public sealed class QbittorrentDownloadClient(
 
     private async Task<string> EnqueueRealOnceAsync(string downloadUri, QbittorrentOptions settings, CancellationToken cancellationToken)
     {
-        var client = _httpClientFactory.CreateClient(nameof(QbittorrentDownloadClient));
+        var client = httpClientFactory.CreateClient(nameof(QbittorrentDownloadClient));
         client.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds));
         client.BaseAddress = new Uri(settings.BaseUrl.TrimEnd('/') + "/");
 
@@ -196,7 +193,7 @@ public sealed class QbittorrentDownloadClient(
         QbittorrentOptions settings,
         CancellationToken cancellationToken)
     {
-        var client = _httpClientFactory.CreateClient(nameof(QbittorrentDownloadClient));
+        var client = httpClientFactory.CreateClient(nameof(QbittorrentDownloadClient));
         client.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds));
         client.BaseAddress = new Uri(settings.BaseUrl.TrimEnd('/') + "/");
 
@@ -237,7 +234,7 @@ public sealed class QbittorrentDownloadClient(
 
     private async Task CancelRealOnceAsync(string externalJobId, QbittorrentOptions settings, CancellationToken cancellationToken)
     {
-        var client = _httpClientFactory.CreateClient(nameof(QbittorrentDownloadClient));
+        var client = httpClientFactory.CreateClient(nameof(QbittorrentDownloadClient));
         client.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds));
         client.BaseAddress = new Uri(settings.BaseUrl.TrimEnd('/') + "/");
 
@@ -274,7 +271,7 @@ public sealed class QbittorrentDownloadClient(
             {
                 lastException = exception;
                 var delay = ComputeRetryDelay(settings.RetryDelayMilliseconds, attempt);
-                _logger.LogDebug(
+                logger.LogDebug(
                     exception,
                     "qBittorrent {Operation} retry {Attempt}/{TotalAttempts} in {DelayMs} ms.",
                     operationName,

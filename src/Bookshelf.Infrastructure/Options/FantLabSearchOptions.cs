@@ -8,7 +8,7 @@ public sealed class FantLabSearchOptions
 
     public string SearchPath { get; set; } = "/search";
 
-    public string QueryParameter { get; set; } = "query";
+    public string QueryParameter { get; set; } = "q";
 
     public int TimeoutSeconds { get; set; } = 8;
 

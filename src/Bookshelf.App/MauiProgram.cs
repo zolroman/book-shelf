@@ -25,7 +25,7 @@ public static class MauiProgram
         builder.Services.AddSingleton(_ => new HttpClient
         {
             BaseAddress = ResolveApiBaseAddress(),
-            Timeout = TimeSpan.FromSeconds(10)
+            Timeout = TimeSpan.FromSeconds(1000)
         });
         builder.Services.AddSingleton<BookshelfApiClient>();
         builder.Services.AddSingleton<IBookshelfApiClient>(sp => sp.GetRequiredService<BookshelfApiClient>());

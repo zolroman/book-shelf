@@ -8,21 +8,18 @@ public sealed class RequestCorrelationMiddleware(
 {
     private const string CorrelationHeader = "X-Correlation-Id";
 
-    private readonly RequestDelegate _next = next;
-    private readonly ILogger<RequestCorrelationMiddleware> _logger = logger;
-
     public async Task Invoke(HttpContext context)
     {
         var correlationId = ResolveCorrelationId(context.Request.Headers);
         context.TraceIdentifier = correlationId;
         context.Response.Headers[CorrelationHeader] = correlationId;
 
-        using (_logger.BeginScope(new Dictionary<string, object>
+        using (logger.BeginScope(new Dictionary<string, object>
                {
                    ["CorrelationId"] = correlationId
                }))
         {
-            await _next(context);
+            await next(context);
         }
     }
 

@@ -9,24 +9,22 @@ namespace Bookshelf.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class LibraryController(IBookshelfRepository repository) : ControllerBase
 {
-    private readonly IBookshelfRepository _repository = repository;
-
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<LibraryBookDto>>> GetLibrary([FromQuery] int userId = 1, CancellationToken cancellationToken = default)
     {
-        var libraryItems = await _repository.GetLibraryItemsAsync(userId, cancellationToken);
+        var libraryItems = await repository.GetLibraryItemsAsync(userId, cancellationToken);
         var result = new List<LibraryBookDto>(libraryItems.Count);
 
         foreach (var item in libraryItems)
         {
-            var book = await _repository.GetBookAsync(item.BookId, cancellationToken);
+            var book = await repository.GetBookAsync(item.BookId, cancellationToken);
             if (book is null)
             {
                 continue;
             }
 
-            var authors = await _repository.GetAuthorsForBookAsync(item.BookId, cancellationToken);
-            var formats = await _repository.GetFormatsForBookAsync(item.BookId, cancellationToken);
+            var authors = await repository.GetAuthorsForBookAsync(item.BookId, cancellationToken);
+            var formats = await repository.GetFormatsForBookAsync(item.BookId, cancellationToken);
 
             result.Add(new LibraryBookDto(item.ToDto(), book.ToSummaryDto(authors, formats)));
         }
@@ -37,7 +35,7 @@ public sealed class LibraryController(IBookshelfRepository repository) : Control
     [HttpPost]
     public async Task<ActionResult<LibraryItemDto>> AddToLibrary([FromBody] AddLibraryItemRequest request, CancellationToken cancellationToken = default)
     {
-        var added = await _repository.AddLibraryItemAsync(request.UserId, request.BookId, cancellationToken);
+        var added = await repository.AddLibraryItemAsync(request.UserId, request.BookId, cancellationToken);
         return Ok(added.ToDto());
     }
 
@@ -47,7 +45,7 @@ public sealed class LibraryController(IBookshelfRepository repository) : Control
         [FromQuery] int userId = 1,
         CancellationToken cancellationToken = default)
     {
-        var removed = await _repository.RemoveLibraryItemAsync(userId, bookId, cancellationToken);
+        var removed = await repository.RemoveLibraryItemAsync(userId, bookId, cancellationToken);
         if (!removed)
         {
             return NotFound();
@@ -63,7 +61,7 @@ public sealed class LibraryController(IBookshelfRepository repository) : Control
         [FromQuery] float rating,
         CancellationToken cancellationToken = default)
     {
-        var item = await _repository.GetLibraryItemAsync(userId, bookId, cancellationToken);
+        var item = await repository.GetLibraryItemAsync(userId, bookId, cancellationToken);
         if (item is null)
         {
             return NotFound();

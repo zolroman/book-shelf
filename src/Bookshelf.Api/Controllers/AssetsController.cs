@@ -9,14 +9,12 @@ namespace Bookshelf.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class AssetsController(IBookshelfRepository repository) : ControllerBase
 {
-    private readonly IBookshelfRepository _repository = repository;
-
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<LocalAssetDto>>> GetAssets(
         [FromQuery] int userId = 1,
         CancellationToken cancellationToken = default)
     {
-        var assets = await _repository.GetLocalAssetsAsync(userId, cancellationToken);
+        var assets = await repository.GetLocalAssetsAsync(userId, cancellationToken);
         return Ok(assets.Select(x => x.ToDto()).ToList());
     }
 
@@ -25,7 +23,7 @@ public sealed class AssetsController(IBookshelfRepository repository) : Controll
         [FromBody] UpsertLocalAssetRequest request,
         CancellationToken cancellationToken = default)
     {
-        var asset = await _repository.AddOrUpdateLocalAssetAsync(
+        var asset = await repository.AddOrUpdateLocalAssetAsync(
             request.UserId,
             request.BookFormatId,
             request.LocalPath,
@@ -42,7 +40,7 @@ public sealed class AssetsController(IBookshelfRepository repository) : Controll
         CancellationToken cancellationToken = default)
     {
         // Local asset deletion must not remove library/progress/history records.
-        var removed = await _repository.MarkLocalAssetDeletedAsync(userId, bookFormatId, cancellationToken);
+        var removed = await repository.MarkLocalAssetDeletedAsync(userId, bookFormatId, cancellationToken);
         if (!removed)
         {
             return NotFound();

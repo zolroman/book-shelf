@@ -16,29 +16,24 @@ public sealed class BookshelfApiClient(
     IOfflineStateStore offlineStateStore,
     ILogger<BookshelfApiClient> logger) : IBookshelfApiClient, IRemoteSyncApiClient
 {
-    private readonly HttpClient _httpClient = httpClient;
-    private readonly IOfflineCacheService _offlineCacheService = offlineCacheService;
-    private readonly IOfflineStateStore _offlineStateStore = offlineStateStore;
-    private readonly ILogger<BookshelfApiClient> _logger = logger;
-
     public async Task<BookDetailsDto?> GetBookDetailsAsync(int bookId, CancellationToken cancellationToken = default)
     {
         var cacheKey = $"book-details-{bookId}";
         try
         {
-            var response = await _httpClient.GetFromJsonAsync<BookDetailsDto>($"api/books/{bookId}", cancellationToken);
+            var response = await httpClient.GetFromJsonAsync<BookDetailsDto>($"api/books/{bookId}", cancellationToken);
             if (response is not null)
             {
-                await _offlineCacheService.SaveAsync(cacheKey, response, cancellationToken);
+                await offlineCacheService.SaveAsync(cacheKey, response, cancellationToken);
                 return response;
             }
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Book details request failed. Returning offline data.");
+            logger.LogWarning(exception, "Book details request failed. Returning offline data.");
         }
 
-        return await _offlineCacheService.LoadAsync<BookDetailsDto>(cacheKey, cancellationToken);
+        return await offlineCacheService.LoadAsync<BookDetailsDto>(cacheKey, cancellationToken);
     }
 
     public async Task<IReadOnlyList<LibraryBookDto>> GetLibraryAsync(int userId, CancellationToken cancellationToken = default)
@@ -47,21 +42,21 @@ public sealed class BookshelfApiClient(
 
         try
         {
-            var response = await _httpClient.GetFromJsonAsync<List<LibraryBookDto>>(
+            var response = await httpClient.GetFromJsonAsync<List<LibraryBookDto>>(
                 $"api/library?userId={userId}",
                 cancellationToken);
             if (response is not null)
             {
-                await _offlineCacheService.SaveAsync(cacheKey, response, cancellationToken);
+                await offlineCacheService.SaveAsync(cacheKey, response, cancellationToken);
                 return response;
             }
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Library request failed. Returning offline data.");
+            logger.LogWarning(exception, "Library request failed. Returning offline data.");
         }
 
-        return await _offlineCacheService.LoadAsync<List<LibraryBookDto>>(cacheKey, cancellationToken) ?? [];
+        return await offlineCacheService.LoadAsync<List<LibraryBookDto>>(cacheKey, cancellationToken) ?? [];
     }
 
     public async Task<IReadOnlyList<BookSummaryDto>> SearchAsync(string query, CancellationToken cancellationToken = default)
@@ -75,28 +70,28 @@ public sealed class BookshelfApiClient(
         var cacheKey = $"search-{trimmedQuery.ToLowerInvariant()}";
         try
         {
-            var response = await _httpClient.GetFromJsonAsync<SearchResultDto>(
+            var response = await httpClient.GetFromJsonAsync<SearchResultDto>(
                 $"api/search?query={Uri.EscapeDataString(trimmedQuery)}",
                 cancellationToken);
             if (response is not null)
             {
-                await _offlineCacheService.SaveAsync(cacheKey, response.Items, cancellationToken);
+                await offlineCacheService.SaveAsync(cacheKey, response.Items, cancellationToken);
                 return response.Items;
             }
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Search request failed. Returning offline cache.");
+            logger.LogWarning(exception, "Search request failed. Returning offline cache.");
         }
 
-        return await _offlineCacheService.LoadAsync<List<BookSummaryDto>>(cacheKey, cancellationToken) ?? [];
+        return await offlineCacheService.LoadAsync<List<BookSummaryDto>>(cacheKey, cancellationToken) ?? [];
     }
 
     public async Task<bool> AddToLibraryAsync(int userId, int bookId, CancellationToken cancellationToken = default)
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync(
+            var response = await httpClient.PostAsJsonAsync(
                 "api/library",
                 new AddLibraryItemRequest(userId, bookId),
                 cancellationToken);
@@ -104,7 +99,7 @@ public sealed class BookshelfApiClient(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Add to library request failed.");
+            logger.LogWarning(exception, "Add to library request failed.");
             return false;
         }
     }
@@ -113,7 +108,7 @@ public sealed class BookshelfApiClient(
     {
         try
         {
-            var response = await _httpClient.GetFromJsonAsync<List<LocalAssetDto>>(
+            var response = await httpClient.GetFromJsonAsync<List<LocalAssetDto>>(
                 $"api/assets?userId={userId}",
                 cancellationToken);
 
@@ -121,7 +116,7 @@ public sealed class BookshelfApiClient(
             {
                 foreach (var asset in response)
                 {
-                    await _offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(asset), cancellationToken);
+                    await offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(asset), cancellationToken);
                 }
 
                 return response;
@@ -129,10 +124,10 @@ public sealed class BookshelfApiClient(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Assets request failed. Returning local index.");
+            logger.LogWarning(exception, "Assets request failed. Returning local index.");
         }
 
-        var localAssets = await _offlineStateStore.GetLocalAssetsAsync(userId, cancellationToken);
+        var localAssets = await offlineStateStore.GetLocalAssetsAsync(userId, cancellationToken);
         return localAssets.Select(ToLocalAssetDto).ToList();
     }
 
@@ -142,19 +137,19 @@ public sealed class BookshelfApiClient(
     {
         try
         {
-            var response = await _httpClient.PutAsJsonAsync("api/assets", request, cancellationToken);
+            var response = await httpClient.PutAsJsonAsync("api/assets", request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var payload = await response.Content.ReadFromJsonAsync<LocalAssetDto>(cancellationToken: cancellationToken);
             if (payload is not null)
             {
-                await _offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(payload), cancellationToken);
+                await offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(payload), cancellationToken);
                 return payload;
             }
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Upsert asset request failed. Updating local index only.");
+            logger.LogWarning(exception, "Upsert asset request failed. Updating local index only.");
         }
 
         var fallback = new LocalAssetDto(
@@ -166,7 +161,7 @@ public sealed class BookshelfApiClient(
             DownloadedAtUtc: DateTime.UtcNow,
             DeletedAtUtc: null);
 
-        await _offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(fallback), cancellationToken);
+        await offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(fallback), cancellationToken);
         return fallback;
     }
 
@@ -178,7 +173,7 @@ public sealed class BookshelfApiClient(
         var remoteSucceeded = false;
         try
         {
-            var response = await _httpClient.DeleteAsync(
+            var response = await httpClient.DeleteAsync(
                 $"api/assets/{bookFormatId}?userId={userId}",
                 cancellationToken);
 
@@ -186,10 +181,10 @@ public sealed class BookshelfApiClient(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Delete asset request failed. Marking local index as deleted.");
+            logger.LogWarning(exception, "Delete asset request failed. Marking local index as deleted.");
         }
 
-        await _offlineStateStore.MarkLocalAssetDeletedAsync(userId, bookFormatId, DateTime.UtcNow, cancellationToken);
+        await offlineStateStore.MarkLocalAssetDeletedAsync(userId, bookFormatId, DateTime.UtcNow, cancellationToken);
         return remoteSucceeded;
     }
 
@@ -199,21 +194,21 @@ public sealed class BookshelfApiClient(
 
         try
         {
-            var response = await _httpClient.GetFromJsonAsync<List<HistoryEventDto>>(
+            var response = await httpClient.GetFromJsonAsync<List<HistoryEventDto>>(
                 $"api/history?userId={userId}",
                 cancellationToken);
             if (response is not null)
             {
-                await _offlineCacheService.SaveAsync(cacheKey, response, cancellationToken);
+                await offlineCacheService.SaveAsync(cacheKey, response, cancellationToken);
                 return response;
             }
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "History request failed. Returning offline data.");
+            logger.LogWarning(exception, "History request failed. Returning offline data.");
         }
 
-        return await _offlineCacheService.LoadAsync<List<HistoryEventDto>>(cacheKey, cancellationToken) ?? [];
+        return await offlineCacheService.LoadAsync<List<HistoryEventDto>>(cacheKey, cancellationToken) ?? [];
     }
 
     public async Task<ProgressSnapshotDto?> GetProgressAsync(
@@ -231,7 +226,7 @@ public sealed class BookshelfApiClient(
             return remote;
         }
 
-        return await _offlineCacheService.LoadAsync<ProgressSnapshotDto>(cacheKey, cancellationToken);
+        return await offlineCacheService.LoadAsync<ProgressSnapshotDto>(cacheKey, cancellationToken);
     }
 
     public async Task<ProgressSnapshotDto?> GetProgressRemoteAsync(
@@ -244,7 +239,7 @@ public sealed class BookshelfApiClient(
         var cacheKey = $"progress-{userId}-{bookId}-{normalizedFormat}";
         try
         {
-            var response = await _httpClient.GetAsync(
+            var response = await httpClient.GetAsync(
                 $"api/progress?userId={userId}&bookId={bookId}&formatType={Uri.EscapeDataString(normalizedFormat)}",
                 cancellationToken);
 
@@ -261,14 +256,14 @@ public sealed class BookshelfApiClient(
             var payload = await response.Content.ReadFromJsonAsync<ProgressSnapshotDto>(cancellationToken: cancellationToken);
             if (payload is not null)
             {
-                await _offlineCacheService.SaveAsync(cacheKey, payload, cancellationToken);
+                await offlineCacheService.SaveAsync(cacheKey, payload, cancellationToken);
             }
 
             return payload;
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Get progress remote request failed.");
+            logger.LogWarning(exception, "Get progress remote request failed.");
             return null;
         }
     }
@@ -281,20 +276,20 @@ public sealed class BookshelfApiClient(
         var cacheKey = $"progress-{request.UserId}-{request.BookId}-{normalizedFormat}";
         try
         {
-            var response = await _httpClient.PutAsJsonAsync("api/progress", request, cancellationToken);
+            var response = await httpClient.PutAsJsonAsync("api/progress", request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var payload = await response.Content.ReadFromJsonAsync<ProgressSnapshotDto>(cancellationToken: cancellationToken);
             if (payload is not null)
             {
-                await _offlineCacheService.SaveAsync(cacheKey, payload, cancellationToken);
+                await offlineCacheService.SaveAsync(cacheKey, payload, cancellationToken);
             }
 
             return payload;
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Upsert progress request failed. Saving local shadow state.");
+            logger.LogWarning(exception, "Upsert progress request failed. Saving local shadow state.");
 
             var localShadow = new ProgressSnapshotDto(
                 Id: 0,
@@ -305,7 +300,7 @@ public sealed class BookshelfApiClient(
                 ProgressPercent: request.ProgressPercent,
                 UpdatedAtUtc: DateTime.UtcNow);
 
-            await _offlineCacheService.SaveAsync(cacheKey, localShadow, cancellationToken);
+            await offlineCacheService.SaveAsync(cacheKey, localShadow, cancellationToken);
             return localShadow;
         }
     }
@@ -318,7 +313,7 @@ public sealed class BookshelfApiClient(
         var cacheKey = $"progress-{request.UserId}-{request.BookId}-{normalizedFormat}";
         try
         {
-            var response = await _httpClient.PutAsJsonAsync("api/progress", request, cancellationToken);
+            var response = await httpClient.PutAsJsonAsync("api/progress", request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return false;
@@ -327,14 +322,14 @@ public sealed class BookshelfApiClient(
             var payload = await response.Content.ReadFromJsonAsync<ProgressSnapshotDto>(cancellationToken: cancellationToken);
             if (payload is not null)
             {
-                await _offlineCacheService.SaveAsync(cacheKey, payload, cancellationToken);
+                await offlineCacheService.SaveAsync(cacheKey, payload, cancellationToken);
             }
 
             return true;
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Upsert progress remote request failed.");
+            logger.LogWarning(exception, "Upsert progress remote request failed.");
             return false;
         }
     }
@@ -345,12 +340,12 @@ public sealed class BookshelfApiClient(
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("api/history", request, cancellationToken);
+            var response = await httpClient.PostAsJsonAsync("api/history", request, cancellationToken);
             return response.IsSuccessStatusCode;
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "History event request failed.");
+            logger.LogWarning(exception, "History event request failed.");
             return false;
         }
     }
@@ -361,12 +356,12 @@ public sealed class BookshelfApiClient(
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("api/history", request, cancellationToken);
+            var response = await httpClient.PostAsJsonAsync("api/history", request, cancellationToken);
             return response.IsSuccessStatusCode;
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Add history event remote request failed.");
+            logger.LogWarning(exception, "Add history event remote request failed.");
             return false;
         }
     }

@@ -7,15 +7,13 @@ namespace Bookshelf.Api.Health;
 
 public sealed class RepositoryHealthCheck(IBookshelfRepository repository) : IHealthCheck
 {
-    private readonly IBookshelfRepository _repository = repository;
-
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var user = await _repository.GetUserAsync(1, cancellationToken);
+            var user = await repository.GetUserAsync(1, cancellationToken);
             return user is null
                 ? HealthCheckResult.Degraded("Repository is reachable but seed data is missing.")
                 : HealthCheckResult.Healthy("Repository reachable.");

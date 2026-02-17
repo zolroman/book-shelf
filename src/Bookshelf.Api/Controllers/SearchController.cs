@@ -12,9 +12,6 @@ public sealed class SearchController(
     IBookSearchProvider searchProvider,
     IBookshelfRepository repository) : ControllerBase
 {
-    private readonly IBookSearchProvider _searchProvider = searchProvider;
-    private readonly IBookshelfRepository _repository = repository;
-
     [HttpGet]
     public async Task<ActionResult<SearchResultDto>> Search(
         [FromQuery] string query,
@@ -25,13 +22,13 @@ public sealed class SearchController(
             return BadRequest("Query is required.");
         }
 
-        var books = await _searchProvider.SearchAsync(query, cancellationToken);
+        var books = await searchProvider.SearchAsync(query, cancellationToken);
         var items = new List<BookSummaryDto>(books.Count);
 
         foreach (var book in books)
         {
-            var authors = await _repository.GetAuthorsForBookAsync(book.Id, cancellationToken);
-            var formats = await _repository.GetFormatsForBookAsync(book.Id, cancellationToken);
+            var authors = await repository.GetAuthorsForBookAsync(book.Id, cancellationToken);
+            var formats = await repository.GetFormatsForBookAsync(book.Id, cancellationToken);
             items.Add(book.ToSummaryDto(authors, formats));
         }
 

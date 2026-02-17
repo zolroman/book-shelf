@@ -12,10 +12,6 @@ public sealed class JackettTorrentSearchClient(
     IOptions<JackettOptions> options,
     ILogger<JackettTorrentSearchClient> logger) : ITorrentSearchClient
 {
-    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
-    private readonly IOptions<JackettOptions> _options = options;
-    private readonly ILogger<JackettTorrentSearchClient> _logger = logger;
-
     public async Task<IReadOnlyList<TorrentCandidate>> SearchAsync(
         string query,
         int maxItems,
@@ -27,7 +23,7 @@ public sealed class JackettTorrentSearchClient(
         }
 
         var normalizedQuery = query.Trim();
-        var settings = _options.Value;
+        var settings = options.Value;
         var effectiveMax = Math.Max(1, Math.Min(maxItems, Math.Max(1, settings.MaxItems)));
 
         if (!settings.Enabled)
@@ -45,7 +41,7 @@ public sealed class JackettTorrentSearchClient(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Jackett search failed for query '{Query}'.", normalizedQuery);
+            logger.LogWarning(exception, "Jackett search failed for query '{Query}'.", normalizedQuery);
         }
 
         return settings.UseMockFallback ? BuildMockCandidates(normalizedQuery, effectiveMax) : [];
@@ -71,7 +67,7 @@ public sealed class JackettTorrentSearchClient(
             {
                 lastException = exception;
                 var delay = ComputeRetryDelay(settings.RetryDelayMilliseconds, attempt);
-                _logger.LogDebug(
+                logger.LogDebug(
                     exception,
                     "Jackett search retry {Attempt}/{TotalAttempts} for query '{Query}' in {DelayMs} ms.",
                     attempt + 1,
@@ -102,7 +98,7 @@ public sealed class JackettTorrentSearchClient(
             throw new InvalidOperationException("Jackett ApiKey is required when Jackett integration is enabled.");
         }
 
-        var client = _httpClientFactory.CreateClient(nameof(JackettTorrentSearchClient));
+        var client = httpClientFactory.CreateClient(nameof(JackettTorrentSearchClient));
         client.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds));
 
         var baseUrl = settings.BaseUrl.TrimEnd('/');
