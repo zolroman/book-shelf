@@ -153,6 +153,15 @@ public sealed class QbittorrentDownloadClient(
 
     private async Task<string> EnqueueRealAsync(string downloadUri, QbittorrentOptions settings, CancellationToken cancellationToken)
     {
+        return await ExecuteWithRetriesAsync(
+            () => EnqueueRealOnceAsync(downloadUri, settings, cancellationToken),
+            "enqueue",
+            settings,
+            cancellationToken);
+    }
+
+    private async Task<string> EnqueueRealOnceAsync(string downloadUri, QbittorrentOptions settings, CancellationToken cancellationToken)
+    {
         var client = _httpClientFactory.CreateClient(nameof(QbittorrentDownloadClient));
         client.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds));
         client.BaseAddress = new Uri(settings.BaseUrl.TrimEnd('/') + "/");
@@ -171,6 +180,18 @@ public sealed class QbittorrentDownloadClient(
     }
 
     private async Task<ExternalDownloadStatus> GetRealStatusAsync(
+        string externalJobId,
+        QbittorrentOptions settings,
+        CancellationToken cancellationToken)
+    {
+        return await ExecuteWithRetriesAsync(
+            () => GetRealStatusOnceAsync(externalJobId, settings, cancellationToken),
+            "status",
+            settings,
+            cancellationToken);
+    }
+
+    private async Task<ExternalDownloadStatus> GetRealStatusOnceAsync(
         string externalJobId,
         QbittorrentOptions settings,
         CancellationToken cancellationToken)
@@ -203,6 +224,19 @@ public sealed class QbittorrentDownloadClient(
 
     private async Task CancelRealAsync(string externalJobId, QbittorrentOptions settings, CancellationToken cancellationToken)
     {
+        await ExecuteWithRetriesAsync(
+            async () =>
+            {
+                await CancelRealOnceAsync(externalJobId, settings, cancellationToken);
+                return true;
+            },
+            "cancel",
+            settings,
+            cancellationToken);
+    }
+
+    private async Task CancelRealOnceAsync(string externalJobId, QbittorrentOptions settings, CancellationToken cancellationToken)
+    {
         var client = _httpClientFactory.CreateClient(nameof(QbittorrentDownloadClient));
         client.Timeout = TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds));
         client.BaseAddress = new Uri(settings.BaseUrl.TrimEnd('/') + "/");
@@ -217,6 +251,56 @@ public sealed class QbittorrentDownloadClient(
 
         using var response = await client.PostAsync("api/v2/torrents/delete", content, cancellationToken);
         response.EnsureSuccessStatusCode();
+    }
+
+    private async Task<T> ExecuteWithRetriesAsync<T>(
+        Func<Task<T>> action,
+        string operationName,
+        QbittorrentOptions settings,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastException = null;
+        var retries = Math.Max(0, settings.MaxRetries);
+
+        for (var attempt = 0; attempt <= retries; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                return await action();
+            }
+            catch (Exception exception) when (attempt < retries && !cancellationToken.IsCancellationRequested)
+            {
+                lastException = exception;
+                var delay = ComputeRetryDelay(settings.RetryDelayMilliseconds, attempt);
+                _logger.LogDebug(
+                    exception,
+                    "qBittorrent {Operation} retry {Attempt}/{TotalAttempts} in {DelayMs} ms.",
+                    operationName,
+                    attempt + 1,
+                    retries + 1,
+                    (int)delay.TotalMilliseconds);
+
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+                break;
+            }
+        }
+
+        throw lastException ?? new InvalidOperationException($"qBittorrent {operationName} failed.");
+    }
+
+    private static TimeSpan ComputeRetryDelay(int baseDelayMilliseconds, int attempt)
+    {
+        var normalizedBase = Math.Max(50, baseDelayMilliseconds);
+        var exponential = normalizedBase * Math.Pow(2, attempt);
+        var jitter = Random.Shared.Next(20, 120);
+        var total = Math.Min(5_000, exponential + jitter);
+        return TimeSpan.FromMilliseconds(total);
     }
 
     private static async Task LoginAsync(HttpClient client, QbittorrentOptions settings, CancellationToken cancellationToken)

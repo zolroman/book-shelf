@@ -52,6 +52,15 @@
   - local deletion path updates only local asset state (`/api/assets/{bookFormatId}`);
   - explicit retention rule documented in repository contract and controller;
   - regression tests verify library/progress/history survive local asset deletion.
+- Phase 9 observability/security/hardening baseline:
+  - structured JSON logging with correlation scope (`X-Correlation-Id`);
+  - security headers middleware (`CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`);
+  - API fixed-window rate limiting (429 on overload);
+  - readiness/liveness health endpoints:
+    - `/health/live`
+    - `/health/ready` (repository + external integration config checks);
+  - retry/backoff hardening for Jackett and qBittorrent adapters;
+  - auth token storage strategy review documented in `docs/auth_token_storage_strategy.md`.
 - Tests:
   - domain/infrastructure/api unit tests are green locally.
 

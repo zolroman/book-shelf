@@ -173,6 +173,39 @@ public class InMemoryBookshelfRepositoryTests
         Assert.Contains(job.ExternalJobId, qbClient.CanceledExternalIds);
     }
 
+    [Fact]
+    public async Task JackettClient_Handles_Transient_Failure_With_Fallback()
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new JackettOptions
+        {
+            Enabled = true,
+            UseMockFallback = true,
+            BaseUrl = "http://localhost:9117",
+            ApiKey = "test-api-key",
+            Indexer = "all",
+            TimeoutSeconds = 5,
+            MaxItems = 5,
+            MaxRetries = 1,
+            RetryDelayMilliseconds = 1
+        });
+
+        var responseCount = 0;
+        var handler = new FakeHandler(_ =>
+        {
+            responseCount++;
+            return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        });
+
+        var client = new HttpClient(handler);
+        var factory = new FakeHttpClientFactory(client);
+        var jackettClient = new JackettTorrentSearchClient(factory, options, NullLogger<JackettTorrentSearchClient>.Instance);
+
+        var results = await jackettClient.SearchAsync("Dune", 5, CancellationToken.None);
+
+        Assert.NotEmpty(results);
+        Assert.True(handler.CallCount >= 1);
+    }
+
     private static FantLabBookSearchProvider CreateProvider(InMemoryBookshelfRepository repository, HttpMessageHandler handler)
     {
         var options = Microsoft.Extensions.Options.Options.Create(new FantLabSearchOptions

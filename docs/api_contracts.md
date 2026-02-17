@@ -2,6 +2,15 @@
 
 Base URL: `http://localhost:5281`
 
+## Operational Endpoints
+- `GET /health/live`
+- `GET /health/ready`
+
+## Common Headers
+- optional request header: `X-Correlation-Id`
+  - if provided, echoed back in response;
+  - if not provided, server generates and returns it.
+
 ## Auth
 - `GET /api/auth/me?userId=1`
 

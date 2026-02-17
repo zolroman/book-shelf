@@ -57,6 +57,46 @@ public sealed class JackettTorrentSearchClient(
         JackettOptions settings,
         CancellationToken cancellationToken)
     {
+        Exception? lastException = null;
+        var retries = Math.Max(0, settings.MaxRetries);
+        for (var attempt = 0; attempt <= retries; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                return await SearchViaJackettOnceAsync(query, maxItems, settings, cancellationToken);
+            }
+            catch (Exception exception) when (attempt < retries && !cancellationToken.IsCancellationRequested)
+            {
+                lastException = exception;
+                var delay = ComputeRetryDelay(settings.RetryDelayMilliseconds, attempt);
+                _logger.LogDebug(
+                    exception,
+                    "Jackett search retry {Attempt}/{TotalAttempts} for query '{Query}' in {DelayMs} ms.",
+                    attempt + 1,
+                    retries + 1,
+                    query,
+                    (int)delay.TotalMilliseconds);
+
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+                break;
+            }
+        }
+
+        throw lastException ?? new InvalidOperationException("Jackett search failed without exception.");
+    }
+
+    private async Task<IReadOnlyList<TorrentCandidate>> SearchViaJackettOnceAsync(
+        string query,
+        int maxItems,
+        JackettOptions settings,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(settings.ApiKey))
         {
             throw new InvalidOperationException("Jackett ApiKey is required when Jackett integration is enabled.");
@@ -135,5 +175,14 @@ public sealed class JackettTorrentSearchClient(
                 Seeders: 100 - index,
                 SizeBytes: 750_000_000 + (index * 25_000_000L)))
             .ToList();
+    }
+
+    private static TimeSpan ComputeRetryDelay(int baseDelayMilliseconds, int attempt)
+    {
+        var normalizedBase = Math.Max(50, baseDelayMilliseconds);
+        var exponential = normalizedBase * Math.Pow(2, attempt);
+        var jitter = Random.Shared.Next(20, 120);
+        var total = Math.Min(5_000, exponential + jitter);
+        return TimeSpan.FromMilliseconds(total);
     }
 }

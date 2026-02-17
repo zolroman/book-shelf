@@ -15,4 +15,8 @@ public sealed class QbittorrentOptions
     public int TimeoutSeconds { get; set; } = 8;
 
     public int MockAutoCompleteSeconds { get; set; } = 4;
+
+    public int MaxRetries { get; set; } = 2;
+
+    public int RetryDelayMilliseconds { get; set; } = 300;
 }

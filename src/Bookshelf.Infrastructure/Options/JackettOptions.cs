@@ -15,4 +15,8 @@ public sealed class JackettOptions
     public int TimeoutSeconds { get; set; } = 8;
 
     public int MaxItems { get; set; } = 20;
+
+    public int MaxRetries { get; set; } = 2;
+
+    public int RetryDelayMilliseconds { get; set; } = 300;
 }
