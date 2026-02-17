@@ -8,10 +8,12 @@ namespace Bookshelf.App.Services;
 public sealed class ReadingSessionService(
     IBookshelfApiClient apiClient,
     ISessionCheckpointStore checkpointStore,
+    IOfflineSyncService offlineSyncService,
     ILogger<ReadingSessionService> logger) : IReadingSessionService
 {
     private readonly IBookshelfApiClient _apiClient = apiClient;
     private readonly ISessionCheckpointStore _checkpointStore = checkpointStore;
+    private readonly IOfflineSyncService _offlineSyncService = offlineSyncService;
     private readonly ILogger<ReadingSessionService> _logger = logger;
 
     public async Task<ReaderSessionCheckpoint> LoadAsync(
@@ -63,13 +65,14 @@ public sealed class ReadingSessionService(
             return;
         }
 
-        _ = await _apiClient.UpsertProgressAsync(
+        _ = await _offlineSyncService.QueueProgressAsync(
             new UpsertProgressRequest(
                 checkpoint.UserId,
                 checkpoint.BookId,
                 checkpoint.FormatType,
                 checkpoint.PositionRef,
                 checkpoint.ProgressPercent),
+            checkpoint.UpdatedAtUtc,
             cancellationToken);
     }
 
@@ -90,7 +93,7 @@ public sealed class ReadingSessionService(
             checkpoint.PositionRef,
             DateTime.UtcNow);
 
-        var result = await _apiClient.AddHistoryEventAsync(request, cancellationToken);
+        var result = await _offlineSyncService.QueueHistoryEventAsync(request, cancellationToken);
         checkpoint.StartedEventSent = result || checkpoint.StartedEventSent;
         await SaveCheckpointAsync(checkpoint, syncRemote: true, cancellationToken);
     }
@@ -115,7 +118,7 @@ public sealed class ReadingSessionService(
             checkpoint.PositionRef,
             DateTime.UtcNow);
 
-        var result = await _apiClient.AddHistoryEventAsync(request, cancellationToken);
+        var result = await _offlineSyncService.QueueHistoryEventAsync(request, cancellationToken);
         checkpoint.CompletedEventSent = result || checkpoint.CompletedEventSent;
         await SaveCheckpointAsync(checkpoint, syncRemote: true, cancellationToken);
     }

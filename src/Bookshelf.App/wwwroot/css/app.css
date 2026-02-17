@@ -33,6 +33,11 @@ html, body {
     border-radius: 14px;
     background: linear-gradient(120deg, #f9f3e5, #fffdf8);
     padding: 1rem 1.2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.8rem;
+    flex-wrap: wrap;
 }
 
 .app-badge {
@@ -41,6 +46,28 @@ html, body {
     letter-spacing: 0.08em;
     font-size: 0.72rem;
     color: var(--muted);
+}
+
+.sync-state {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #ffffff;
+    padding: 0.35rem 0.65rem;
+    display: inline-flex;
+    gap: 0.6rem;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+}
+
+.sync-online {
+    border-color: #8bc5a6;
+    color: #1c5d3c;
+}
+
+.sync-offline {
+    border-color: #d8b48f;
+    color: #8b3a1d;
 }
 
 .shell-nav {
@@ -261,6 +288,10 @@ input[type="text"] {
 }
 
 @media (max-width: 700px) {
+    .shell-header {
+        align-items: stretch;
+    }
+
     .shell-nav {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }

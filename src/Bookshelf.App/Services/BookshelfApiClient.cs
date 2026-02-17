@@ -11,7 +11,7 @@ namespace Bookshelf.App.Services;
 public sealed class BookshelfApiClient(
     HttpClient httpClient,
     IOfflineCacheService offlineCacheService,
-    ILogger<BookshelfApiClient> logger) : IBookshelfApiClient
+    ILogger<BookshelfApiClient> logger) : IBookshelfApiClient, IRemoteSyncApiClient
 {
     private readonly HttpClient _httpClient = httpClient;
     private readonly IOfflineCacheService _offlineCacheService = offlineCacheService;
@@ -136,6 +136,24 @@ public sealed class BookshelfApiClient(
     {
         var normalizedFormat = formatType.ToLowerInvariant();
         var cacheKey = $"progress-{userId}-{bookId}-{normalizedFormat}";
+
+        var remote = await GetProgressRemoteAsync(userId, bookId, normalizedFormat, cancellationToken);
+        if (remote is not null)
+        {
+            return remote;
+        }
+
+        return await _offlineCacheService.LoadAsync<ProgressSnapshotDto>(cacheKey, cancellationToken);
+    }
+
+    public async Task<ProgressSnapshotDto?> GetProgressRemoteAsync(
+        int userId,
+        int bookId,
+        string formatType,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedFormat = formatType.ToLowerInvariant();
+        var cacheKey = $"progress-{userId}-{bookId}-{normalizedFormat}";
         try
         {
             var response = await _httpClient.GetAsync(
@@ -144,10 +162,14 @@ public sealed class BookshelfApiClient(
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                return await _offlineCacheService.LoadAsync<ProgressSnapshotDto>(cacheKey, cancellationToken);
+                return null;
             }
 
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
             var payload = await response.Content.ReadFromJsonAsync<ProgressSnapshotDto>(cancellationToken: cancellationToken);
             if (payload is not null)
             {
@@ -158,8 +180,8 @@ public sealed class BookshelfApiClient(
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Get progress request failed. Returning local checkpoint.");
-            return await _offlineCacheService.LoadAsync<ProgressSnapshotDto>(cacheKey, cancellationToken);
+            _logger.LogWarning(exception, "Get progress remote request failed.");
+            return null;
         }
     }
 
@@ -200,6 +222,35 @@ public sealed class BookshelfApiClient(
         }
     }
 
+    public async Task<bool> UpsertProgressRemoteAsync(
+        UpsertProgressRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedFormat = request.FormatType.ToLowerInvariant();
+        var cacheKey = $"progress-{request.UserId}-{request.BookId}-{normalizedFormat}";
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync("api/progress", request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<ProgressSnapshotDto>(cancellationToken: cancellationToken);
+            if (payload is not null)
+            {
+                await _offlineCacheService.SaveAsync(cacheKey, payload, cancellationToken);
+            }
+
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Upsert progress remote request failed.");
+            return false;
+        }
+    }
+
     public async Task<bool> AddHistoryEventAsync(
         AddHistoryEventRequest request,
         CancellationToken cancellationToken = default)
@@ -212,6 +263,22 @@ public sealed class BookshelfApiClient(
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "History event request failed.");
+            return false;
+        }
+    }
+
+    public async Task<bool> AddHistoryEventRemoteAsync(
+        AddHistoryEventRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("api/history", request, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Add history event remote request failed.");
             return false;
         }
     }

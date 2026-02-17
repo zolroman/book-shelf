@@ -34,6 +34,19 @@
   - checkpoint persistence in local SQLite (`bookshelf_sessions.db`) with offline restore across app restart;
   - progress sync via `/api/progress` and history events via `/api/history`;
   - independent positions for text and audio formats of the same book.
+- Phase 7 offline-first sync baseline:
+  - offline SQLite state store (`bookshelf_offline.db`) with schema for:
+    - metadata cache (`metadata_cache`);
+    - pending sync queue (`pending_sync_operations`);
+    - local asset index (`local_assets_index`);
+  - offline sync engine (`OfflineSyncService`):
+    - immediate online sync attempt for progress/history events;
+    - queue-on-failure/offline + periodic/background flush;
+    - reconnect-triggered flush on connectivity changes;
+  - conflict policy:
+    - progress snapshots: latest timestamp wins (skip stale local snapshot if remote is newer);
+    - history events: append-only replay from queue;
+  - connectivity-aware app shell status (online/offline + pending queue + last sync outcome).
 - Tests:
   - domain/infrastructure/api unit tests are green locally.
 
@@ -43,7 +56,7 @@
 - Production hardening of Jackett/qBittorrent integrations (auth/availability/rate limits across real deployments).
 - OIDC integration with Authelia.
 - Full EPUB rendering engine and native background audio playback integration.
-- Offline sync conflict resolution across multiple devices.
+- Advanced cross-device merge policies beyond timestamp/append-only baseline.
 
 ## Verification snapshot
 - Backend build: success.

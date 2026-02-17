@@ -2,51 +2,39 @@ using System.Text.Json;
 
 namespace Bookshelf.App.Services;
 
-public sealed class OfflineCacheService : IOfflineCacheService
+public sealed class OfflineCacheService(IOfflineStateStore stateStore) : IOfflineCacheService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly SemaphoreSlim _mutex = new(1, 1);
+    private readonly IOfflineStateStore _stateStore = stateStore;
 
     public async Task SaveAsync<T>(string key, T payload, CancellationToken cancellationToken = default)
     {
-        var path = BuildPath(key);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-
-        await _mutex.WaitAsync(cancellationToken);
-        try
-        {
-            var json = JsonSerializer.Serialize(payload, JsonOptions);
-            await File.WriteAllTextAsync(path, json, cancellationToken);
-        }
-        finally
-        {
-            _mutex.Release();
-        }
+        var normalizedKey = NormalizeKey(key);
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        await _stateStore.SaveMetadataAsync(normalizedKey, json, cancellationToken);
     }
 
     public async Task<T?> LoadAsync<T>(string key, CancellationToken cancellationToken = default)
     {
-        var path = BuildPath(key);
-        if (!File.Exists(path))
+        var normalizedKey = NormalizeKey(key);
+        var json = await _stateStore.LoadMetadataAsync(normalizedKey, cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
         {
             return default;
         }
 
-        await _mutex.WaitAsync(cancellationToken);
         try
         {
-            var json = await File.ReadAllTextAsync(path, cancellationToken);
             return JsonSerializer.Deserialize<T>(json, JsonOptions);
         }
-        finally
+        catch (JsonException)
         {
-            _mutex.Release();
+            return default;
         }
     }
 
-    private static string BuildPath(string key)
+    private static string NormalizeKey(string key)
     {
-        var safeKey = key.Replace("/", "_").Replace("\\", "_");
-        return Path.Combine(FileSystem.AppDataDirectory, "offline-cache", $"{safeKey}.json");
+        return key.Trim().Replace("/", "_").Replace("\\", "_");
     }
 }
