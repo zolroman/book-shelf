@@ -12,11 +12,17 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IBookshelfRepository, InMemoryBookshelfRepository>();
-        services.AddSingleton<IDownloadService, InMemoryDownloadService>();
         services.AddMemoryCache();
         services.AddHttpClient(nameof(FantLabBookSearchProvider));
+        services.AddHttpClient(nameof(JackettTorrentSearchClient));
+        services.AddHttpClient(nameof(QbittorrentDownloadClient));
         services.Configure<FantLabSearchOptions>(configuration.GetSection("Search:FantLab"));
+        services.Configure<JackettOptions>(configuration.GetSection("Downloads:Jackett"));
+        services.Configure<QbittorrentOptions>(configuration.GetSection("Downloads:Qbittorrent"));
         services.AddSingleton<IBookSearchProvider, FantLabBookSearchProvider>();
+        services.AddSingleton<ITorrentSearchClient, JackettTorrentSearchClient>();
+        services.AddSingleton<IQbittorrentDownloadClient, QbittorrentDownloadClient>();
+        services.AddSingleton<IDownloadService, DownloadPipelineService>();
         return services;
     }
 }

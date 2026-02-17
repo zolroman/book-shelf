@@ -34,11 +34,19 @@ Base URL: `http://localhost:5281`
   - body: `{ "userId":1, "bookId":1, "formatType":"audio", "eventType":"progress", "positionRef":"00:42:12", "eventAtUtc":null }`
 
 ## Downloads
+- `GET /api/downloads/candidates?query=dune&maxItems=10`
 - `GET /api/downloads?userId=1`
 - `GET /api/downloads/{jobId}`
 - `POST /api/downloads/start`
-  - body: `{ "userId":1, "bookFormatId":2, "source":"jackett" }`
+  - body: `{ "userId":1, "bookFormatId":2, "source":"dune" }`
+  - `source` behavior:
+    - if `source` is a magnet/http(s) URI -> direct enqueue;
+    - otherwise `source` is treated as a search query for Jackett candidates.
 - `POST /api/downloads/{jobId}/cancel`
+  - behavior:
+    - start is idempotent for active jobs (`queued/downloading`) per `(userId, bookFormatId)`;
+    - active jobs are synchronized with external client state on read;
+    - when job becomes `completed`, corresponding `LocalAsset` record is created/updated.
 
 ## Assets (Offline File State)
 - `GET /api/assets?userId=1`

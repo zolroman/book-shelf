@@ -2,11 +2,12 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using Bookshelf.Domain.Abstractions;
+using Bookshelf.Domain.Enums;
+using Bookshelf.Infrastructure.Models;
 using Bookshelf.Infrastructure.Options;
 using Bookshelf.Infrastructure.Services;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 
 namespace Bookshelf.Infrastructure.Tests;
 
@@ -88,6 +89,70 @@ public class InMemoryBookshelfRepositoryTests
         Assert.Equal(1, handler.CallCount);
     }
 
+    [Fact]
+    public async Task DownloadPipeline_Start_Is_Idempotent_For_Active_Job()
+    {
+        var repository = new InMemoryBookshelfRepository(new FixedClock());
+        var torrentSearch = new FakeTorrentSearchClient();
+        var qbClient = new FakeQbittorrentClient();
+        var service = new DownloadPipelineService(
+            repository,
+            torrentSearch,
+            qbClient,
+            new FixedClock(),
+            NullLogger<DownloadPipelineService>.Instance);
+
+        var first = await service.StartAsync(1, 1, "The Martian", CancellationToken.None);
+        var second = await service.StartAsync(1, 1, "The Martian", CancellationToken.None);
+
+        Assert.Equal(first.Id, second.Id);
+    }
+
+    [Fact]
+    public async Task DownloadPipeline_Completed_Job_Creates_Local_Asset()
+    {
+        var repository = new InMemoryBookshelfRepository(new FixedClock());
+        var torrentSearch = new FakeTorrentSearchClient();
+        var qbClient = new FakeQbittorrentClient();
+        var service = new DownloadPipelineService(
+            repository,
+            torrentSearch,
+            qbClient,
+            new FixedClock(),
+            NullLogger<DownloadPipelineService>.Instance);
+
+        var job = await service.StartAsync(1, 1, "The Martian", CancellationToken.None);
+        qbClient.SetStatus(job.ExternalJobId, ExternalDownloadStatus.Completed);
+
+        var refreshed = await service.GetJobAsync(job.Id, CancellationToken.None);
+        var assets = await repository.GetLocalAssetsAsync(1, CancellationToken.None);
+
+        Assert.NotNull(refreshed);
+        Assert.Equal(DownloadJobStatus.Completed, refreshed!.Status);
+        Assert.Contains(assets, x => x.BookFormatId == 1 && !x.IsDeleted);
+    }
+
+    [Fact]
+    public async Task DownloadPipeline_Cancel_Transitions_To_Canceled()
+    {
+        var repository = new InMemoryBookshelfRepository(new FixedClock());
+        var torrentSearch = new FakeTorrentSearchClient();
+        var qbClient = new FakeQbittorrentClient();
+        var service = new DownloadPipelineService(
+            repository,
+            torrentSearch,
+            qbClient,
+            new FixedClock(),
+            NullLogger<DownloadPipelineService>.Instance);
+
+        var job = await service.StartAsync(1, 1, "The Martian", CancellationToken.None);
+        var canceled = await service.CancelAsync(job.Id, CancellationToken.None);
+
+        Assert.NotNull(canceled);
+        Assert.Equal(DownloadJobStatus.Canceled, canceled!.Status);
+        Assert.Contains(job.ExternalJobId, qbClient.CanceledExternalIds);
+    }
+
     private static FantLabBookSearchProvider CreateProvider(InMemoryBookshelfRepository repository, HttpMessageHandler handler)
     {
         var options = Microsoft.Extensions.Options.Options.Create(new FantLabSearchOptions
@@ -132,6 +197,81 @@ public class InMemoryBookshelfRepositoryTests
         {
             CallCount++;
             return Task.FromResult(_factory(request));
+        }
+    }
+
+    private sealed class FakeTorrentSearchClient : ITorrentSearchClient
+    {
+        public Task<IReadOnlyList<TorrentCandidate>> SearchAsync(string query, int maxItems, CancellationToken cancellationToken)
+        {
+            var candidate = new TorrentCandidate(
+                $"{query} mock",
+                CreateMagnet(query),
+                "test-jackett",
+                Seeders: 50,
+                SizeBytes: 800_000_000);
+
+            return Task.FromResult<IReadOnlyList<TorrentCandidate>>([candidate]);
+        }
+
+        private static string CreateMagnet(string query)
+        {
+            var hex = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(Encoding.UTF8.GetBytes(query)));
+            return $"magnet:?xt=urn:btih:{hex}&dn={Uri.EscapeDataString(query)}";
+        }
+    }
+
+    private sealed class FakeQbittorrentClient : IQbittorrentDownloadClient
+    {
+        private readonly Dictionary<string, ExternalDownloadStatus> _states = new(StringComparer.OrdinalIgnoreCase);
+
+        public List<string> CanceledExternalIds { get; } = [];
+
+        public Task<string> EnqueueAsync(string downloadUri, CancellationToken cancellationToken)
+        {
+            var externalId = TryExtractHash(downloadUri) ?? $"test-{Guid.NewGuid():N}";
+            _states[externalId] = ExternalDownloadStatus.Downloading;
+            return Task.FromResult(externalId);
+        }
+
+        public Task<ExternalDownloadStatus> GetStatusAsync(string externalJobId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_states.TryGetValue(externalJobId, out var status)
+                ? status
+                : ExternalDownloadStatus.Unknown);
+        }
+
+        public Task CancelAsync(string externalJobId, CancellationToken cancellationToken)
+        {
+            CanceledExternalIds.Add(externalJobId);
+            _states[externalJobId] = ExternalDownloadStatus.Canceled;
+            return Task.CompletedTask;
+        }
+
+        public void SetStatus(string externalJobId, ExternalDownloadStatus status)
+        {
+            _states[externalJobId] = status;
+        }
+
+        private static string? TryExtractHash(string downloadUri)
+        {
+            if (!downloadUri.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var query = downloadUri["magnet:?".Length..];
+            foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!part.StartsWith("xt=urn:btih:", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                return part["xt=urn:btih:".Length..].ToLowerInvariant();
+            }
+
+            return null;
         }
     }
 }

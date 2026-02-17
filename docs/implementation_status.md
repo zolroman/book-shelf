@@ -17,6 +17,12 @@
   - response normalization from variable JSON structures into internal book model;
   - short-term query cache for repeated searches;
   - import/upsert of external search results into repository.
+- Phase 4 download pipeline baseline:
+  - `DownloadPipelineService` orchestrates candidate search, enqueue, status sync, cancel, and idempotent start;
+  - Jackett adapter (`JackettTorrentSearchClient`) with Torznab parsing + mock fallback;
+  - qBittorrent adapter (`QbittorrentDownloadClient`) with API integration + mock fallback;
+  - `DownloadJob` lifecycle persisted in repository and synchronized from external status;
+  - completed downloads create/update `LocalAsset` metadata automatically.
 - App baseline (Phase 5 skeleton):
   - MAUI Hybrid Blazor app with tabs/pages: dashboard, shelf, search, history;
   - API client + offline JSON cache fallback.
@@ -26,7 +32,7 @@
 ## Not completed yet (next iterations)
 - PostgreSQL persistence and EF migrations.
 - Production validation against live FantLab schema variations and rate limits.
-- Real Jackett + qBittorrent orchestration.
+- Production hardening of Jackett/qBittorrent integrations (auth/availability/rate limits across real deployments).
 - OIDC integration with Authelia.
 - Reader engine and full audio player implementation.
 - Offline sync conflict resolution across multiple devices.
@@ -35,4 +41,4 @@
 - Backend build: success.
 - MAUI Windows build: success.
 - Unit tests: success.
-- API smoke test: success (`books`, `search`, `library add/list`).
+- API smoke test: success (`books`, `search`, `library add/list`, `downloads candidates/start/status/assets`).

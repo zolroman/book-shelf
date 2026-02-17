@@ -18,6 +18,8 @@ public interface IBookshelfRepository
 
     Task<IReadOnlyList<BookFormat>> GetFormatsForBookAsync(int bookId, CancellationToken cancellationToken);
 
+    Task<BookFormat?> GetBookFormatAsync(int bookFormatId, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<LibraryItem>> GetLibraryItemsAsync(int userId, CancellationToken cancellationToken);
 
     Task<LibraryItem?> GetLibraryItemAsync(int userId, int bookId, CancellationToken cancellationToken);
@@ -52,6 +54,28 @@ public interface IBookshelfRepository
     Task<IReadOnlyList<HistoryEvent>> GetHistoryEventsAsync(
         int userId,
         int? bookId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DownloadJob>> GetDownloadJobsAsync(int userId, CancellationToken cancellationToken);
+
+    Task<DownloadJob?> GetDownloadJobAsync(int jobId, CancellationToken cancellationToken);
+
+    Task<DownloadJob?> GetActiveDownloadJobAsync(int userId, int bookFormatId, CancellationToken cancellationToken);
+
+    Task<DownloadJob> CreateDownloadJobAsync(
+        int userId,
+        int bookFormatId,
+        string source,
+        CancellationToken cancellationToken);
+
+    Task<DownloadJob> UpdateDownloadJobExternalIdAsync(
+        int jobId,
+        string externalJobId,
+        CancellationToken cancellationToken);
+
+    Task<DownloadJob> UpdateDownloadJobStatusAsync(
+        int jobId,
+        DownloadJobStatus status,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<LocalAsset>> GetLocalAssetsAsync(int userId, CancellationToken cancellationToken);

@@ -1,9 +1,15 @@
 using Bookshelf.Domain.Entities;
+using Bookshelf.Infrastructure.Models;
 
 namespace Bookshelf.Infrastructure.Services;
 
 public interface IDownloadService
 {
+    Task<IReadOnlyList<TorrentCandidate>> SearchCandidatesAsync(
+        string query,
+        int maxItems,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<DownloadJob>> GetJobsAsync(int userId, CancellationToken cancellationToken);
 
     Task<DownloadJob?> GetJobAsync(int jobId, CancellationToken cancellationToken);

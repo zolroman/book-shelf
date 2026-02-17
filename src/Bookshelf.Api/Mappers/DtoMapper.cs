@@ -1,5 +1,6 @@
 using Bookshelf.Domain.Entities;
 using Bookshelf.Domain.Enums;
+using Bookshelf.Infrastructure.Models;
 using Bookshelf.Shared.Contracts.Assets;
 using Bookshelf.Shared.Contracts.Books;
 using Bookshelf.Shared.Contracts.Downloads;
@@ -83,6 +84,13 @@ public static class DtoMapper
         job.ExternalJobId,
         job.CreatedAtUtc,
         job.CompletedAtUtc);
+
+    public static TorrentCandidateDto ToDto(this TorrentCandidate candidate) => new(
+        candidate.Title,
+        candidate.DownloadUri,
+        candidate.Source,
+        candidate.Seeders,
+        candidate.SizeBytes);
 
     public static LocalAssetDto ToDto(this LocalAsset asset) => new(
         asset.Id,

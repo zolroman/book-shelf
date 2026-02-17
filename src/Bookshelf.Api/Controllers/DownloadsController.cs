@@ -11,6 +11,21 @@ public sealed class DownloadsController(IDownloadService downloadService) : Cont
 {
     private readonly IDownloadService _downloadService = downloadService;
 
+    [HttpGet("candidates")]
+    public async Task<ActionResult<IReadOnlyList<TorrentCandidateDto>>> GetCandidates(
+        [FromQuery] string query,
+        [FromQuery] int maxItems = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return BadRequest("Query is required.");
+        }
+
+        var candidates = await _downloadService.SearchCandidatesAsync(query, maxItems, cancellationToken);
+        return Ok(candidates.Select(x => x.ToDto()).ToList());
+    }
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<DownloadJobDto>>> GetJobs(
         [FromQuery] int userId = 1,

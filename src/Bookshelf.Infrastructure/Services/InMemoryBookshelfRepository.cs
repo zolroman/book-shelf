@@ -18,6 +18,7 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
     private readonly List<LibraryItem> _libraryItems = [];
     private readonly List<ProgressSnapshot> _progressSnapshots = [];
     private readonly List<HistoryEvent> _historyEvents = [];
+    private readonly List<DownloadJob> _downloadJobs = [];
     private readonly List<LocalAsset> _localAssets = [];
 
     private int _nextBookId;
@@ -26,6 +27,7 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
     private int _nextLibraryItemId;
     private int _nextProgressSnapshotId;
     private int _nextHistoryEventId;
+    private int _nextDownloadJobId;
     private int _nextLocalAssetId;
 
     public InMemoryBookshelfRepository(IClock clock)
@@ -208,6 +210,15 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
         }
     }
 
+    public Task<BookFormat?> GetBookFormatAsync(int bookFormatId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_syncRoot)
+        {
+            return Task.FromResult(_bookFormats.SingleOrDefault(x => x.Id == bookFormatId));
+        }
+    }
+
     public Task<IReadOnlyList<LibraryItem>> GetLibraryItemsAsync(int userId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -366,6 +377,113 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
 
             var history = events.OrderByDescending(x => x.EventAtUtc).ToList();
             return Task.FromResult<IReadOnlyList<HistoryEvent>>(history);
+        }
+    }
+
+    public Task<IReadOnlyList<DownloadJob>> GetDownloadJobsAsync(int userId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_syncRoot)
+        {
+            var jobs = _downloadJobs
+                .Where(x => x.UserId == userId)
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .ToList();
+            return Task.FromResult<IReadOnlyList<DownloadJob>>(jobs);
+        }
+    }
+
+    public Task<DownloadJob?> GetDownloadJobAsync(int jobId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_syncRoot)
+        {
+            return Task.FromResult(_downloadJobs.SingleOrDefault(x => x.Id == jobId));
+        }
+    }
+
+    public Task<DownloadJob?> GetActiveDownloadJobAsync(
+        int userId,
+        int bookFormatId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_syncRoot)
+        {
+            var existing = _downloadJobs.SingleOrDefault(x =>
+                x.UserId == userId &&
+                x.BookFormatId == bookFormatId &&
+                x.Status is DownloadJobStatus.Queued or DownloadJobStatus.Downloading);
+            return Task.FromResult(existing);
+        }
+    }
+
+    public Task<DownloadJob> CreateDownloadJobAsync(
+        int userId,
+        int bookFormatId,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_syncRoot)
+        {
+            _ = _users.Single(x => x.Id == userId);
+            _ = _bookFormats.Single(x => x.Id == bookFormatId);
+
+            var existing = _downloadJobs.SingleOrDefault(x =>
+                x.UserId == userId &&
+                x.BookFormatId == bookFormatId &&
+                x.Status is DownloadJobStatus.Queued or DownloadJobStatus.Downloading);
+            if (existing is not null)
+            {
+                return Task.FromResult(existing);
+            }
+
+            var entity = new DownloadJob
+            {
+                Id = _nextDownloadJobId++,
+                UserId = userId,
+                BookFormatId = bookFormatId,
+                Source = source,
+                CreatedAtUtc = _clock.UtcNow
+            };
+            _downloadJobs.Add(entity);
+            return Task.FromResult(entity);
+        }
+    }
+
+    public Task<DownloadJob> UpdateDownloadJobExternalIdAsync(
+        int jobId,
+        string externalJobId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_syncRoot)
+        {
+            var entity = _downloadJobs.SingleOrDefault(x => x.Id == jobId)
+                         ?? throw new ArgumentException($"Download job {jobId} not found.");
+            entity.ExternalJobId = externalJobId;
+            return Task.FromResult(entity);
+        }
+    }
+
+    public Task<DownloadJob> UpdateDownloadJobStatusAsync(
+        int jobId,
+        DownloadJobStatus status,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_syncRoot)
+        {
+            var entity = _downloadJobs.SingleOrDefault(x => x.Id == jobId)
+                         ?? throw new ArgumentException($"Download job {jobId} not found.");
+            if (entity.Status == status)
+            {
+                return Task.FromResult(entity);
+            }
+
+            entity.TransitionTo(status, _clock.UtcNow);
+            return Task.FromResult(entity);
         }
     }
 
@@ -534,6 +652,7 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
         _nextLibraryItemId = 1;
         _nextProgressSnapshotId = 1;
         _nextHistoryEventId = 1;
+        _nextDownloadJobId = 1;
         _nextLocalAssetId = 1;
     }
 
