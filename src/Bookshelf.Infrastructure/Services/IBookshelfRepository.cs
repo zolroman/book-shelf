@@ -87,5 +87,8 @@ public interface IBookshelfRepository
         long fileSizeBytes,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Updates only local-file state. Library, progress snapshots, and history events must remain unchanged.
+    /// </summary>
     Task<bool> MarkLocalAssetDeletedAsync(int userId, int bookFormatId, CancellationToken cancellationToken);
 }

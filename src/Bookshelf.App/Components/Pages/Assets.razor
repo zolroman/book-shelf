@@ -1,0 +1,129 @@
+@page "/assets"
+@inject IBookshelfApiClient ApiClient
+
+<section class="card">
+    <div class="section-header">
+        <div>
+            <h1>Local Assets</h1>
+            <p class="subtitle">Delete local files to free space. Reading history and progress are retained.</p>
+        </div>
+        <button class="btn" @onclick="LoadAsync">Refresh</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_status))
+    {
+        <p class="status">@_status</p>
+    }
+
+    @if (_loading)
+    {
+        <p>Loading local assets...</p>
+    }
+    else if (_assets.Count == 0)
+    {
+        <p>No local files indexed yet.</p>
+    }
+    else
+    {
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Format Id</th>
+                    <th>Path</th>
+                    <th>Size</th>
+                    <th>State</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var asset in _assets)
+                {
+                    var isDeleted = asset.DeletedAtUtc.HasValue;
+                    var isDeleting = _deletingFormatIds.Contains(asset.BookFormatId);
+                    <tr>
+                        <td>@asset.BookFormatId</td>
+                        <td>@asset.LocalPath</td>
+                        <td>@FormatBytes(asset.FileSizeBytes)</td>
+                        <td>
+                            @if (isDeleted)
+                            {
+                                <span class="chip">Deleted @asset.DeletedAtUtc?.ToString("u")</span>
+                            }
+                            else
+                            {
+                                <span class="chip">Available</span>
+                            }
+                        </td>
+                        <td>
+                            <button
+                                class="btn"
+                                @onclick="() => DeleteAsync(asset)"
+                                disabled="@(isDeleted || isDeleting)">
+                                @(isDeleting ? "Deleting..." : "Delete Local File")
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private bool _loading;
+    private string _status = string.Empty;
+    private IReadOnlyList<LocalAssetDto> _assets = [];
+    private readonly HashSet<int> _deletingFormatIds = [];
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _assets = await ApiClient.GetAssetsAsync(userId: 1);
+        _loading = false;
+    }
+
+    private async Task DeleteAsync(LocalAssetDto asset)
+    {
+        if (asset.DeletedAtUtc.HasValue || _deletingFormatIds.Contains(asset.BookFormatId))
+        {
+            return;
+        }
+
+        _deletingFormatIds.Add(asset.BookFormatId);
+        _status = string.Empty;
+        try
+        {
+            var deletedRemotely = await ApiClient.MarkAssetDeletedAsync(asset.UserId, asset.BookFormatId);
+            await LoadAsync();
+            _status = deletedRemotely
+                ? "Local file deleted. History/progress entries are preserved."
+                : "Local file marked as deleted in offline index. History/progress entries are preserved.";
+        }
+        finally
+        {
+            _deletingFormatIds.Remove(asset.BookFormatId);
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024)
+        {
+            return $"{bytes} B";
+        }
+
+        if (bytes < 1024 * 1024)
+        {
+            return $"{bytes / 1024d:0.#} KB";
+        }
+
+        if (bytes < 1024 * 1024 * 1024)
+        {
+            return $"{bytes / (1024d * 1024d):0.#} MB";
+        }
+
+        return $"{bytes / (1024d * 1024d * 1024d):0.#} GB";
+    }
+}

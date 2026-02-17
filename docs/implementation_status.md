@@ -47,6 +47,11 @@
     - progress snapshots: latest timestamp wins (skip stale local snapshot if remote is newer);
     - history events: append-only replay from queue;
   - connectivity-aware app shell status (online/offline + pending queue + last sync outcome).
+- Phase 8 history persistence guarantee:
+  - added client storage management screen (`/assets`) for local file deletion flow;
+  - local deletion path updates only local asset state (`/api/assets/{bookFormatId}`);
+  - explicit retention rule documented in repository contract and controller;
+  - regression tests verify library/progress/history survive local asset deletion.
 - Tests:
   - domain/infrastructure/api unit tests are green locally.
 

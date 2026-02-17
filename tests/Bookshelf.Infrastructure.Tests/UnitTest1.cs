@@ -39,6 +39,26 @@ public class InMemoryBookshelfRepositoryTests
     }
 
     [Fact]
+    public async Task Deleting_Local_Asset_Does_Not_Remove_Library_Or_Progress()
+    {
+        var repository = new InMemoryBookshelfRepository(new FixedClock());
+
+        await repository.AddLibraryItemAsync(1, 1, CancellationToken.None);
+        await repository.UpsertProgressSnapshotAsync(1, 1, BookFormatType.Text, "c1:p10", 12.5f, CancellationToken.None);
+        await repository.AddOrUpdateLocalAssetAsync(1, 1, "local/file.epub", 100, CancellationToken.None);
+
+        await repository.MarkLocalAssetDeletedAsync(1, 1, CancellationToken.None);
+
+        var libraryItem = await repository.GetLibraryItemAsync(1, 1, CancellationToken.None);
+        var progress = await repository.GetProgressSnapshotAsync(1, 1, BookFormatType.Text, CancellationToken.None);
+
+        Assert.NotNull(libraryItem);
+        Assert.NotNull(progress);
+        Assert.Equal(12.5f, progress!.ProgressPercent);
+        Assert.Equal("c1:p10", progress.PositionRef);
+    }
+
+    [Fact]
     public async Task FantLabProvider_Imports_And_Normalizes_Results()
     {
         var repository = new InMemoryBookshelfRepository(new FixedClock());

@@ -41,6 +41,7 @@ public sealed class AssetsController(IBookshelfRepository repository) : Controll
         [FromQuery] int userId = 1,
         CancellationToken cancellationToken = default)
     {
+        // Local asset deletion must not remove library/progress/history records.
         var removed = await _repository.MarkLocalAssetDeletedAsync(userId, bookFormatId, cancellationToken);
         if (!removed)
         {

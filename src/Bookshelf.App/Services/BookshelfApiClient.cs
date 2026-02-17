@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using Bookshelf.App.Models;
+using Bookshelf.Shared.Contracts.Assets;
 using Bookshelf.Shared.Contracts.Books;
 using Bookshelf.Shared.Contracts.History;
 using Bookshelf.Shared.Contracts.Library;
@@ -11,10 +13,12 @@ namespace Bookshelf.App.Services;
 public sealed class BookshelfApiClient(
     HttpClient httpClient,
     IOfflineCacheService offlineCacheService,
+    IOfflineStateStore offlineStateStore,
     ILogger<BookshelfApiClient> logger) : IBookshelfApiClient, IRemoteSyncApiClient
 {
     private readonly HttpClient _httpClient = httpClient;
     private readonly IOfflineCacheService _offlineCacheService = offlineCacheService;
+    private readonly IOfflineStateStore _offlineStateStore = offlineStateStore;
     private readonly ILogger<BookshelfApiClient> _logger = logger;
 
     public async Task<BookDetailsDto?> GetBookDetailsAsync(int bookId, CancellationToken cancellationToken = default)
@@ -103,6 +107,90 @@ public sealed class BookshelfApiClient(
             _logger.LogWarning(exception, "Add to library request failed.");
             return false;
         }
+    }
+
+    public async Task<IReadOnlyList<LocalAssetDto>> GetAssetsAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.GetFromJsonAsync<List<LocalAssetDto>>(
+                $"api/assets?userId={userId}",
+                cancellationToken);
+
+            if (response is not null)
+            {
+                foreach (var asset in response)
+                {
+                    await _offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(asset), cancellationToken);
+                }
+
+                return response;
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Assets request failed. Returning local index.");
+        }
+
+        var localAssets = await _offlineStateStore.GetLocalAssetsAsync(userId, cancellationToken);
+        return localAssets.Select(ToLocalAssetDto).ToList();
+    }
+
+    public async Task<LocalAssetDto?> UpsertLocalAssetAsync(
+        UpsertLocalAssetRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync("api/assets", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            var payload = await response.Content.ReadFromJsonAsync<LocalAssetDto>(cancellationToken: cancellationToken);
+            if (payload is not null)
+            {
+                await _offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(payload), cancellationToken);
+                return payload;
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Upsert asset request failed. Updating local index only.");
+        }
+
+        var fallback = new LocalAssetDto(
+            Id: 0,
+            UserId: request.UserId,
+            BookFormatId: request.BookFormatId,
+            LocalPath: request.LocalPath,
+            FileSizeBytes: request.FileSizeBytes,
+            DownloadedAtUtc: DateTime.UtcNow,
+            DeletedAtUtc: null);
+
+        await _offlineStateStore.UpsertLocalAssetAsync(ToLocalAssetRecord(fallback), cancellationToken);
+        return fallback;
+    }
+
+    public async Task<bool> MarkAssetDeletedAsync(
+        int userId,
+        int bookFormatId,
+        CancellationToken cancellationToken = default)
+    {
+        var remoteSucceeded = false;
+        try
+        {
+            var response = await _httpClient.DeleteAsync(
+                $"api/assets/{bookFormatId}?userId={userId}",
+                cancellationToken);
+
+            remoteSucceeded = response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Delete asset request failed. Marking local index as deleted.");
+        }
+
+        await _offlineStateStore.MarkLocalAssetDeletedAsync(userId, bookFormatId, DateTime.UtcNow, cancellationToken);
+        return remoteSucceeded;
     }
 
     public async Task<IReadOnlyList<HistoryEventDto>> GetHistoryAsync(int userId, CancellationToken cancellationToken = default)
@@ -281,5 +369,28 @@ public sealed class BookshelfApiClient(
             _logger.LogWarning(exception, "Add history event remote request failed.");
             return false;
         }
+    }
+
+    private static LocalAssetIndexRecord ToLocalAssetRecord(LocalAssetDto asset)
+    {
+        return new LocalAssetIndexRecord(
+            UserId: asset.UserId,
+            BookFormatId: asset.BookFormatId,
+            LocalPath: asset.LocalPath,
+            FileSizeBytes: asset.FileSizeBytes,
+            DownloadedAtUtc: asset.DownloadedAtUtc,
+            DeletedAtUtc: asset.DeletedAtUtc);
+    }
+
+    private static LocalAssetDto ToLocalAssetDto(LocalAssetIndexRecord record)
+    {
+        return new LocalAssetDto(
+            Id: 0,
+            UserId: record.UserId,
+            BookFormatId: record.BookFormatId,
+            LocalPath: record.LocalPath,
+            FileSizeBytes: record.FileSizeBytes,
+            DownloadedAtUtc: record.DownloadedAtUtc,
+            DeletedAtUtc: record.DeletedAtUtc);
     }
 }

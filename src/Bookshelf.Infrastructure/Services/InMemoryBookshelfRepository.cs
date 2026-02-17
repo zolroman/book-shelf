@@ -532,6 +532,7 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
         cancellationToken.ThrowIfCancellationRequested();
         lock (_syncRoot)
         {
+            // Retention guarantee: deleting file state must never cascade into library/progress/history data.
             var entity = _localAssets.SingleOrDefault(x => x.UserId == userId && x.BookFormatId == bookFormatId);
             if (entity is null)
             {
