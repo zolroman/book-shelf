@@ -2,6 +2,7 @@ using Bookshelf.Domain;
 using Bookshelf.Domain.Abstractions;
 using Bookshelf.Domain.Entities;
 using Bookshelf.Domain.Enums;
+using Bookshelf.Infrastructure.Models;
 
 namespace Bookshelf.Infrastructure.Services;
 
@@ -19,6 +20,9 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
     private readonly List<HistoryEvent> _historyEvents = [];
     private readonly List<LocalAsset> _localAssets = [];
 
+    private int _nextBookId;
+    private int _nextAuthorId;
+    private int _nextBookFormatId;
     private int _nextLibraryItemId;
     private int _nextProgressSnapshotId;
     private int _nextHistoryEventId;
@@ -75,6 +79,112 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
         lock (_syncRoot)
         {
             return Task.FromResult(_books.SingleOrDefault(x => x.Id == bookId));
+        }
+    }
+
+    public Task<Book> UpsertImportedBookAsync(ImportedBookSeed seed, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_syncRoot)
+        {
+            if (string.IsNullOrWhiteSpace(seed.Title))
+            {
+                throw new ArgumentException("Book title is required for import.", nameof(seed));
+            }
+
+            var normalizedTitle = seed.Title.Trim();
+            var normalizedOriginalTitle = string.IsNullOrWhiteSpace(seed.OriginalTitle)
+                ? normalizedTitle
+                : seed.OriginalTitle.Trim();
+
+            var existing = _books.FirstOrDefault(book =>
+                book.Title.Equals(normalizedTitle, StringComparison.OrdinalIgnoreCase) ||
+                book.OriginalTitle.Equals(normalizedOriginalTitle, StringComparison.OrdinalIgnoreCase));
+
+            if (existing is null)
+            {
+                existing = new Book
+                {
+                    Id = _nextBookId++,
+                    Title = normalizedTitle,
+                    OriginalTitle = normalizedOriginalTitle,
+                    PublishYear = seed.PublishYear,
+                    CommunityRating = seed.CommunityRating,
+                    Description = seed.Description ?? string.Empty,
+                    CoverUrl = seed.CoverUrl ?? string.Empty,
+                    CreatedAtUtc = _clock.UtcNow
+                };
+                _books.Add(existing);
+            }
+            else
+            {
+                existing.Title = PreferValue(seed.Title, existing.Title);
+                existing.OriginalTitle = PreferValue(seed.OriginalTitle, existing.OriginalTitle);
+                existing.Description = PreferValue(seed.Description, existing.Description);
+                existing.CoverUrl = PreferValue(seed.CoverUrl, existing.CoverUrl);
+                existing.PublishYear ??= seed.PublishYear;
+                existing.CommunityRating ??= seed.CommunityRating;
+            }
+
+            foreach (var authorName in seed.Authors
+                         .Where(name => !string.IsNullOrWhiteSpace(name))
+                         .Select(name => name.Trim())
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var author = _authors.FirstOrDefault(entity =>
+                    entity.Name.Equals(authorName, StringComparison.OrdinalIgnoreCase));
+                if (author is null)
+                {
+                    author = new Author
+                    {
+                        Id = _nextAuthorId++,
+                        Name = authorName
+                    };
+                    _authors.Add(author);
+                }
+
+                if (existing.Authors.All(a => a.Id != author.Id))
+                {
+                    existing.Authors.Add(author);
+                }
+
+                if (author.Books.All(book => book.Id != existing.Id))
+                {
+                    author.Books.Add(existing);
+                }
+            }
+
+            var ensureText = seed.HasText || (!seed.HasText && !seed.HasAudio);
+            var ensureAudio = seed.HasAudio;
+
+            if (ensureText && _bookFormats.All(x => x.BookId != existing.Id || x.FormatType != BookFormatType.Text))
+            {
+                _bookFormats.Add(new BookFormat
+                {
+                    Id = _nextBookFormatId++,
+                    BookId = existing.Id,
+                    FormatType = BookFormatType.Text,
+                    Language = "en",
+                    FileSizeBytes = 0,
+                    Checksum = $"imported-{existing.Id}-text"
+                });
+            }
+
+            if (ensureAudio && _bookFormats.All(x => x.BookId != existing.Id || x.FormatType != BookFormatType.Audio))
+            {
+                _bookFormats.Add(new BookFormat
+                {
+                    Id = _nextBookFormatId++,
+                    BookId = existing.Id,
+                    FormatType = BookFormatType.Audio,
+                    Language = "en",
+                    DurationSeconds = 0,
+                    FileSizeBytes = 0,
+                    Checksum = $"imported-{existing.Id}-audio"
+                });
+            }
+
+            return Task.FromResult(existing);
         }
     }
 
@@ -418,9 +528,17 @@ public sealed class InMemoryBookshelfRepository : IBookshelfRepository
             }
         ]);
 
+        _nextBookId = _books.Max(x => x.Id) + 1;
+        _nextAuthorId = _authors.Max(x => x.Id) + 1;
+        _nextBookFormatId = _bookFormats.Max(x => x.Id) + 1;
         _nextLibraryItemId = 1;
         _nextProgressSnapshotId = 1;
         _nextHistoryEventId = 1;
         _nextLocalAssetId = 1;
+    }
+
+    private static string PreferValue(string? candidate, string existing)
+    {
+        return string.IsNullOrWhiteSpace(candidate) ? existing : candidate.Trim();
     }
 }

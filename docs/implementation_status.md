@@ -12,6 +12,11 @@
   - controllers for auth, books, library, search, downloads, progress, history, assets;
   - request parsing and exception middleware;
   - API contracts draft in `docs/api_contracts.md`.
+- Phase 3 search integration baseline:
+  - `FantLabBookSearchProvider` with resilient flow (retry + circuit-breaker + fallback to local search);
+  - response normalization from variable JSON structures into internal book model;
+  - short-term query cache for repeated searches;
+  - import/upsert of external search results into repository.
 - App baseline (Phase 5 skeleton):
   - MAUI Hybrid Blazor app with tabs/pages: dashboard, shelf, search, history;
   - API client + offline JSON cache fallback.
@@ -20,7 +25,7 @@
 
 ## Not completed yet (next iterations)
 - PostgreSQL persistence and EF migrations.
-- Real FantLab adapter and resilient provider integration.
+- Production validation against live FantLab schema variations and rate limits.
 - Real Jackett + qBittorrent orchestration.
 - OIDC integration with Authelia.
 - Reader engine and full audio player implementation.

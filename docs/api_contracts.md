@@ -18,6 +18,10 @@ Base URL: `http://localhost:5281`
 
 ## Search
 - `GET /api/search?query=dune`
+  - behavior:
+    - tries external provider (FantLab) with retry + circuit-breaker;
+    - falls back to local repository results on external errors/timeouts;
+    - caches repeated query results for short TTL.
 
 ## Progress
 - `GET /api/progress?userId=1&bookId=1&formatType=text`

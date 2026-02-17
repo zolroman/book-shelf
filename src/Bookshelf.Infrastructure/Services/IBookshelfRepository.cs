@@ -1,5 +1,6 @@
 using Bookshelf.Domain.Entities;
 using Bookshelf.Domain.Enums;
+using Bookshelf.Infrastructure.Models;
 
 namespace Bookshelf.Infrastructure.Services;
 
@@ -10,6 +11,8 @@ public interface IBookshelfRepository
     Task<IReadOnlyList<Book>> GetBooksAsync(string? query, string? author, CancellationToken cancellationToken);
 
     Task<Book?> GetBookAsync(int bookId, CancellationToken cancellationToken);
+
+    Task<Book> UpsertImportedBookAsync(ImportedBookSeed seed, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<Author>> GetAuthorsForBookAsync(int bookId, CancellationToken cancellationToken);
 

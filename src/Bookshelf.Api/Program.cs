@@ -5,7 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.UseUrls("http://localhost:5281");
 builder.Services.AddControllers();
-builder.Services.AddBookshelfInfrastructure();
+builder.Services.AddBookshelfInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
