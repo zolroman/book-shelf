@@ -29,6 +29,7 @@ Primary references:
 Goal: create clean project skeleton and shared conventions.
 
 Scope:
+- Use `dotnet new maui-blazor-web ...` comand to create solution
 - Create solution structure:
   - `src/Bookshelf.Api`
   - `src/Bookshelf.Application`
