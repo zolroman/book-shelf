@@ -117,30 +117,56 @@ public static class V1Endpoints
         }
     }
 
-    private static IResult GetCandidates(
+    private static async Task<IResult> GetCandidates(
         string providerCode,
         string providerBookKey,
         string? mediaType,
         int? page,
-        int? pageSize)
+        int? pageSize,
+        ICandidateDiscoveryService candidateDiscoveryService,
+        CancellationToken cancellationToken)
     {
         EnsureRequired(providerCode, nameof(providerCode));
         EnsureRequired(providerBookKey, nameof(providerBookKey));
+        if (!providerCode.Equals(FantLabProviderCode, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "Unsupported providerCode for v1. Expected 'fantlab'.",
+                HttpStatusCode.BadRequest);
+        }
+
         var normalizedMediaType = EnsureMediaType(mediaType);
 
         var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
         var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
 
-        var response = new DownloadCandidatesResponse(
-            ProviderCode: providerCode,
-            ProviderBookKey: providerBookKey,
-            MediaType: normalizedMediaType,
-            Page: safePage,
-            PageSize: safePageSize,
-            Total: 0,
-            Items: Array.Empty<DownloadCandidateDto>());
+        try
+        {
+            var response = await candidateDiscoveryService.FindAsync(
+                    providerCode,
+                    providerBookKey,
+                    normalizedMediaType,
+                    safePage,
+                    safePageSize,
+                    cancellationToken);
 
-        return Results.Ok(response);
+            return Results.Ok(response);
+        }
+        catch (MetadataProviderUnavailableException exception)
+        {
+            throw new ApiException(
+                ApiErrorCodes.FantlabUnavailable,
+                $"Metadata provider '{exception.ProviderCode}' is unavailable.",
+                HttpStatusCode.BadGateway);
+        }
+        catch (DownloadCandidateProviderUnavailableException exception)
+        {
+            throw new ApiException(
+                ApiErrorCodes.JackettUnavailable,
+                $"Candidate provider '{exception.ProviderCode}' is unavailable.",
+                HttpStatusCode.BadGateway);
+        }
     }
 
     private static IResult AddAndDownload(AddAndDownloadRequest request, InMemoryApiStore store)

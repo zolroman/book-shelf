@@ -1,4 +1,4 @@
-# BookShelf Phase 3 Runbook
+# BookShelf Phase 4 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
@@ -57,6 +57,17 @@ Environment keys supported by the server:
 - `FANTLAB_TIMEOUT_SECONDS` (default `10`)
 - `FANTLAB_MAX_RETRIES` (default `2`)
 - `FANTLAB_RETRY_DELAY_MS` (default `300`)
+
+## Jackett Configuration
+Environment keys supported by the server:
+- `JACKETT_ENABLED` (default `true`)
+- `JACKETT_BASE_URL` (default `http://192.168.40.25:9117`)
+- `JACKETT_API_KEY` (required for candidate discovery)
+- `JACKETT_INDEXER` (default `all`)
+- `JACKETT_TIMEOUT_SECONDS` (default `15`)
+- `JACKETT_MAX_RETRIES` (default `2`)
+- `JACKETT_RETRY_DELAY_MS` (default `300`)
+- `JACKETT_MAX_ITEMS` (default `50`)
 
 ## Run API
 ```powershell

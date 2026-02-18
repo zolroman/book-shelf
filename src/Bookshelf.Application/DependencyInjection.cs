@@ -9,6 +9,7 @@ public static class DependencyInjection
     public static IServiceCollection AddBookshelfApplication(this IServiceCollection services)
     {
         services.AddScoped<IBookSearchService, BookSearchService>();
+        services.AddScoped<ICandidateDiscoveryService, CandidateDiscoveryService>();
         return services;
     }
 }

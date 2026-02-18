@@ -1,6 +1,7 @@
 using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Abstractions.Persistence;
 using Bookshelf.Infrastructure.Integrations.FantLab;
+using Bookshelf.Infrastructure.Integrations.Jackett;
 using Bookshelf.Infrastructure.Persistence;
 using Bookshelf.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.Caching.Memory;
@@ -44,6 +45,17 @@ public static class DependencyInjection
             options.CircuitBreakerFailureThreshold = GetInt(configuration, "FANTLAB_CIRCUIT_BREAKER_FAILURES", "FantLab:CircuitBreakerFailureThreshold", 3);
             options.CircuitBreakerOpenSeconds = GetInt(configuration, "FANTLAB_CIRCUIT_BREAKER_OPEN_SECONDS", "FantLab:CircuitBreakerOpenSeconds", 60);
         });
+        services.Configure<JackettOptions>(options =>
+        {
+            options.Enabled = GetBool(configuration, "JACKETT_ENABLED", "Jackett:Enabled", true);
+            options.BaseUrl = GetString(configuration, "JACKETT_BASE_URL", "Jackett:BaseUrl", "http://192.168.40.25:9117");
+            options.ApiKey = GetString(configuration, "JACKETT_API_KEY", "Jackett:ApiKey", string.Empty);
+            options.Indexer = GetString(configuration, "JACKETT_INDEXER", "Jackett:Indexer", "all");
+            options.TimeoutSeconds = GetInt(configuration, "JACKETT_TIMEOUT_SECONDS", "Jackett:TimeoutSeconds", 15);
+            options.MaxRetries = GetInt(configuration, "JACKETT_MAX_RETRIES", "Jackett:MaxRetries", 2);
+            options.RetryDelayMs = GetInt(configuration, "JACKETT_RETRY_DELAY_MS", "Jackett:RetryDelayMs", 300);
+            options.MaxItems = GetInt(configuration, "JACKETT_MAX_ITEMS", "Jackett:MaxItems", 50);
+        });
 
         services.AddHttpClient<FantLabMetadataProvider>((serviceProvider, client) =>
         {
@@ -51,8 +63,16 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
         });
+        services.AddHttpClient<JackettCandidateProvider>((serviceProvider, client) =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<JackettOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
+        });
         services.AddScoped<IMetadataProvider>(serviceProvider =>
             serviceProvider.GetRequiredService<FantLabMetadataProvider>());
+        services.AddScoped<IDownloadCandidateProvider>(serviceProvider =>
+            serviceProvider.GetRequiredService<JackettCandidateProvider>());
 
         services.AddScoped<IBookRepository, BookRepository>();
         services.AddScoped<IShelfRepository, ShelfRepository>();

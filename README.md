@@ -13,7 +13,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 3 Baseline
+## Phase 4 Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
@@ -24,6 +24,10 @@ Requirements are defined in `requirements/` and are the source of truth.
 - Correlation ID propagation via `X-Correlation-Id`
 - FantLab metadata provider integration for search/details (`/api/v1/search/books*`)
 - Config-driven retries, timeout, cache, and circuit-breaker for FantLab calls
+- Jackett candidate discovery integration for `GET /api/v1/search/books/{provider}/{bookKey}/candidates`
+- Candidate parsing from Torznab XML with `sourceUrl` retention from Jackett `details`
+- Backend media pre-classification (`text`/`audio`/`unknown`) with ranking and pagination
+- API mapping for provider failures: `FANTLAB_UNAVAILABLE`, `JACKETT_UNAVAILABLE` (`502`)
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 
