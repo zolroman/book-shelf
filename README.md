@@ -13,9 +13,12 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 0 Baseline
+## Phase 1 Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
+- Domain entities and invariants for catalog/media/shelves/history/download jobs
+- EF Core persistence with PostgreSQL mappings and initial migration
+- Repository interfaces and EF repository adapters (`Book`, `Shelf`, `DownloadJob`)
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 
@@ -24,6 +27,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 dotnet restore src/Bookshelf.Api/Bookshelf.Api.csproj
 dotnet build src/Bookshelf.Api/Bookshelf.Api.csproj --no-restore
 dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj --no-restore
+dotnet ef database update --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj
 ```
 
 For full Phase 0 run steps, see `docs/runbook.md`.

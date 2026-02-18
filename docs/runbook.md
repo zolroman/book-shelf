@@ -1,8 +1,9 @@
-# BookShelf Phase 0 Runbook
+# BookShelf Phase 1 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
 - MAUI workload for local MAUI app execution (Windows target for `Bookshelf.App`)
+- PostgreSQL server for migration apply (`ConnectionStrings:Bookshelf`)
 
 ## Restore
 ```powershell
@@ -39,6 +40,12 @@ dotnet test tests/Bookshelf.Domain.Tests/Bookshelf.Domain.Tests.csproj
 dotnet test tests/Bookshelf.Application.Tests/Bookshelf.Application.Tests.csproj
 dotnet test tests/Bookshelf.Infrastructure.Tests/Bookshelf.Infrastructure.Tests.csproj
 dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj
+```
+
+## Database Migration
+```powershell
+dotnet ef migrations list --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj
+dotnet ef database update --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj
 ```
 
 ## Run API
