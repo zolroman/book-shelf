@@ -48,7 +48,11 @@ All API errors return:
 - `STORAGE_WRITE_FAILED` (`500`)
 - `STATE_TRANSITION_INVALID` (`500`)
 
-## 10. UI Mapping Rules
+## 10. Traffic Guard Errors
+- `RATE_LIMIT_EXCEEDED` (`429`): request rejected by API rate limiting policy
+- `PAYLOAD_TOO_LARGE` (`413`): request body exceeds configured limit
+
+## 11. UI Mapping Rules
 - Retry button for `*_UNAVAILABLE`, `SYNC_FAILED_RETRYABLE`.
 - Inline form hint for validation errors.
 - Non-retriable conflicts show clear recovery instruction.

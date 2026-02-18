@@ -1,5 +1,6 @@
 using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Abstractions.Persistence;
+using Bookshelf.Infrastructure.Integrations;
 using Bookshelf.Infrastructure.Integrations.FantLab;
 using Bookshelf.Infrastructure.Integrations.Jackett;
 using Bookshelf.Infrastructure.Integrations.QBittorrent;
@@ -21,9 +22,15 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var connectionString = configuration.GetConnectionString("Bookshelf")
-            ?? configuration["ConnectionStrings:Bookshelf"]
-            ?? "Host=localhost;Port=5432;Database=bookshelf;Username=bookshelf;Password=bookshelf";
+        var connectionString = configuration["BOOKSHELF_CONNECTION_STRING"]
+            ?? configuration.GetConnectionString("Bookshelf")
+            ?? configuration["ConnectionStrings:Bookshelf"];
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "Database connection string is not configured. Set BOOKSHELF_CONNECTION_STRING or ConnectionStrings:Bookshelf.");
+        }
 
         services.AddDbContext<BookshelfDbContext>(options =>
         {
@@ -31,6 +38,7 @@ public static class DependencyInjection
         });
 
         services.AddMemoryCache();
+        services.AddTransient<CorrelationIdPropagationHandler>();
         services.Configure<FantLabOptions>(options =>
         {
             options.Enabled = GetBool(configuration, "FANTLAB_ENABLED", "FantLab:Enabled", true);
@@ -74,19 +82,19 @@ public static class DependencyInjection
             var options = serviceProvider.GetRequiredService<IOptions<FantLabOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
-        });
+        }).AddHttpMessageHandler<CorrelationIdPropagationHandler>();
         services.AddHttpClient<JackettCandidateProvider>((serviceProvider, client) =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<JackettOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
-        });
+        }).AddHttpMessageHandler<CorrelationIdPropagationHandler>();
         services.AddHttpClient<QBittorrentDownloadClient>((serviceProvider, client) =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<QBittorrentOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
-        });
+        }).AddHttpMessageHandler<CorrelationIdPropagationHandler>();
         services.AddScoped<IMetadataProvider>(serviceProvider =>
             serviceProvider.GetRequiredService<FantLabMetadataProvider>());
         services.AddScoped<IDownloadCandidateProvider>(serviceProvider =>

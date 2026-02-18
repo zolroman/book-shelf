@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Bookshelf.Application.Abstractions.Persistence;
 using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Abstractions.Services;
@@ -10,6 +11,13 @@ namespace Bookshelf.Application.Services;
 
 public sealed class DownloadJobService : IDownloadJobService
 {
+    public const string MeterName = "Bookshelf.Application.DownloadSync";
+
+    private static readonly Meter Meter = new(MeterName);
+    private static readonly Histogram<double> SyncLagHistogram = Meter.CreateHistogram<double>("download_sync_lag_seconds");
+    private static readonly Histogram<long> SyncQueueSizeHistogram = Meter.CreateHistogram<long>("download_sync_queue_size");
+    private static readonly Counter<long> SyncTransitionCounter = Meter.CreateCounter<long>("download_sync_state_transitions_total");
+
     private readonly IDownloadJobRepository _downloadJobRepository;
     private readonly IBookRepository _bookRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -104,9 +112,11 @@ public sealed class DownloadJobService : IDownloadJobService
         }
 
         var nowUtc = DateTimeOffset.UtcNow;
+        var previousStatus = job.Status;
         job.TransitionTo(DownloadJobStatus.Canceled, nowUtc);
         _downloadJobRepository.Update(job);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        RecordStateTransition(job, previousStatus, job.Status);
 
         return Map(job);
     }
@@ -114,9 +124,25 @@ public sealed class DownloadJobService : IDownloadJobService
     public async Task SyncActiveAsync(CancellationToken cancellationToken = default)
     {
         var jobs = await _downloadJobRepository.ListActiveAsync(limit: 100, cancellationToken);
+        SyncQueueSizeHistogram.Record(jobs.Count);
+
         foreach (var job in jobs)
         {
+            var previousStatus = job.Status;
+            var previousFailureReason = job.FailureReason;
+            var lagSeconds = Math.Max(0, (DateTimeOffset.UtcNow - job.UpdatedAtUtc).TotalSeconds);
+            SyncLagHistogram.Record(
+                lagSeconds,
+                new("media_type", job.MediaType.ToString().ToLowerInvariant()),
+                new("status", previousStatus.ToString().ToLowerInvariant()));
+
             await SyncSingleAsync(job, cancellationToken);
+
+            if (previousStatus != job.Status
+                || !string.Equals(previousFailureReason, job.FailureReason, StringComparison.Ordinal))
+            {
+                RecordStateTransition(job, previousStatus, job.Status);
+            }
         }
     }
 
@@ -332,5 +358,17 @@ public sealed class DownloadJobService : IDownloadJobService
             "canceled" => DownloadJobStatus.Canceled,
             _ => throw new ArgumentException("Unsupported download job status filter.", nameof(status)),
         };
+    }
+
+    private static void RecordStateTransition(
+        DownloadJob job,
+        DownloadJobStatus fromStatus,
+        DownloadJobStatus toStatus)
+    {
+        SyncTransitionCounter.Add(
+            1,
+            new("from_status", fromStatus.ToString().ToLowerInvariant()),
+            new("to_status", toStatus.ToString().ToLowerInvariant()),
+            new("media_type", job.MediaType.ToString().ToLowerInvariant()));
     }
 }

@@ -10,7 +10,12 @@ public class DependencyInjectionTests
     public void AddBookshelfInfrastructure_ReturnsServiceCollection()
     {
         IServiceCollection services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder().Build();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Bookshelf"] = "Host=localhost;Port=5432;Database=bookshelf_test;Username=bookshelf;Password=bookshelf",
+            })
+            .Build();
 
         var result = services.AddBookshelfInfrastructure(configuration);
 

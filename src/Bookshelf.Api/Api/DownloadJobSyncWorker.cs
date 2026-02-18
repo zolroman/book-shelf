@@ -1,3 +1,4 @@
+using Bookshelf.Application.Abstractions.Persistence;
 using Bookshelf.Application.Abstractions.Services;
 using Bookshelf.Application.Exceptions;
 
@@ -25,9 +26,38 @@ public sealed class DownloadJobSyncWorker : BackgroundService
             {
                 using var scope = _serviceScopeFactory.CreateScope();
                 var downloadJobService = scope.ServiceProvider.GetRequiredService<IDownloadJobService>();
+                var downloadJobRepository = scope.ServiceProvider.GetRequiredService<IDownloadJobRepository>();
                 try
                 {
+                    var beforeSync = await downloadJobRepository.ListActiveAsync(limit: 500, stoppingToken);
+                    var snapshots = beforeSync
+                        .Select(job => new JobStatusSnapshot(job.Id, job.Status.ToString().ToLowerInvariant(), job.FailureReason))
+                        .ToArray();
+
                     await downloadJobService.SyncActiveAsync(stoppingToken);
+
+                    foreach (var snapshot in snapshots)
+                    {
+                        var updated = await downloadJobRepository.GetByIdAsync(snapshot.JobId, stoppingToken);
+                        if (updated is null)
+                        {
+                            continue;
+                        }
+
+                        var updatedStatus = updated.Status.ToString().ToLowerInvariant();
+                        if (updatedStatus == snapshot.Status
+                            && string.Equals(updated.FailureReason, snapshot.FailureReason, StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        _logger.LogInformation(
+                            "Download job state transition. JobId={JobId} From={FromStatus} To={ToStatus} FailureReason={FailureReason}",
+                            updated.Id,
+                            snapshot.Status,
+                            updatedStatus,
+                            updated.FailureReason);
+                    }
                 }
                 catch (DownloadExecutionUnavailableException exception)
                 {
@@ -52,4 +82,6 @@ public sealed class DownloadJobSyncWorker : BackgroundService
             timer.Dispose();
         }
     }
+
+    private sealed record JobStatusSnapshot(long JobId, string Status, string? FailureReason);
 }

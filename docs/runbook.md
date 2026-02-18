@@ -1,4 +1,4 @@
-# BookShelf Phase 9 Runbook
+# BookShelf Phase 10 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
@@ -127,8 +127,55 @@ Environment keys supported by the server:
 ```powershell
 dotnet run --project src/Bookshelf.Api/Bookshelf.Api.csproj
 ```
-- Health: `http://localhost:5000/health` or the assigned launch port
+- Health (live): `http://localhost:5000/health` or `http://localhost:5000/health/live`
+- Readiness: `http://localhost:5000/health/ready`
 - Ping: `http://localhost:5000/api/v1/system/ping`
+
+## API Traffic Guardrails
+Configuration keys:
+- `API_MAX_BODY_BYTES` or `RequestLimits:MaxBodyBytes` (default `262144`)
+- `API_RATE_LIMIT_PERMIT_LIMIT` or `RateLimiting:PermitLimit` (default `120`)
+- `API_RATE_LIMIT_WINDOW_SECONDS` or `RateLimiting:WindowSeconds` (default `60`)
+- `API_RATE_LIMIT_QUEUE_LIMIT` or `RateLimiting:QueueLimit` (default `0`)
+
+Error codes:
+- `RATE_LIMIT_EXCEEDED` (`429`)
+- `PAYLOAD_TOO_LARGE` (`413`)
+
+## OpenTelemetry
+Configuration keys:
+- `OTEL_SERVICE_NAME` (default `bookshelf-api`)
+- `OTEL_EXPORTER_OTLP_ENDPOINT` (optional; if set, OTLP export is enabled)
+
+Instrumented metrics/traces include:
+- ASP.NET Core request telemetry
+- HttpClient telemetry
+- Runtime telemetry
+- Custom meters:
+  - `Bookshelf.Api.Http`
+  - `Bookshelf.Application.DownloadSync`
+  - `Bookshelf.Integrations.FantLab`
+  - `Bookshelf.Integrations.Jackett`
+  - `Bookshelf.Integrations.QBittorrent`
+
+## Database Backup / Restore
+Connection string input:
+- `BOOKSHELF_CONNECTION_STRING` environment variable, or pass explicitly via script parameter.
+
+Backup:
+```powershell
+pwsh -File scripts/db-backup.ps1 -ConnectionString "Host=...;Port=5432;Database=...;Username=...;Password=..."
+```
+
+Restore:
+```powershell
+pwsh -File scripts/db-restore.ps1 -BackupFile "artifacts/backups/bookshelf-20260218-220000.dump" -ConnectionString "Host=...;Port=5432;Database=...;Username=...;Password=..." -DropExistingObjects
+```
+
+Smoke check (backup + archive validation):
+```powershell
+pwsh -File scripts/db-backup-restore-smoke.ps1 -ConnectionString "Host=...;Port=5432;Database=...;Username=...;Password=..."
+```
 
 ## Run Web
 ```powershell

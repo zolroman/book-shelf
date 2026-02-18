@@ -18,6 +18,9 @@
 # Test
 TestResults/
 
+# Local .NET CLI state
+.dotnet/
+
 # MAUI
 **/Platforms/**/obj/
 

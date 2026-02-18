@@ -4,6 +4,7 @@ using Bookshelf.Application.Abstractions.Services;
 using Bookshelf.Application.Exceptions;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Shared.Contracts.Api;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Bookshelf.Api.Api;
 
@@ -13,7 +14,7 @@ public static class V1Endpoints
 
     public static IEndpointRouteBuilder MapV1Endpoints(this IEndpointRouteBuilder app)
     {
-        var v1 = app.MapGroup("/api/v1");
+        var v1 = app.MapGroup("/api/v1").RequireRateLimiting("api-v1");
         var search = v1.MapGroup("/search/books");
 
         search.MapGet(string.Empty, SearchBooks);

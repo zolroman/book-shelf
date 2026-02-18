@@ -28,6 +28,8 @@ public static class ApiErrorCodes
 
     public const string NetworkRequired = "NETWORK_REQUIRED";
     public const string SyncFailedRetryable = "SYNC_FAILED_RETRYABLE";
+    public const string RateLimitExceeded = "RATE_LIMIT_EXCEEDED";
+    public const string PayloadTooLarge = "PAYLOAD_TOO_LARGE";
 
     public const string InternalError = "INTERNAL_ERROR";
     public const string StorageWriteFailed = "STORAGE_WRITE_FAILED";

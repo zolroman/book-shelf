@@ -13,7 +13,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 9 Offline Sync Baseline
+## Phase 10 Observability and Hardening Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
@@ -64,14 +64,31 @@ Requirements are defined in `requirements/` and are the source of truth.
   - local progress/history writes queue while offline
   - add/download action disabled offline (`NETWORK_REQUIRED`)
 - Web host remains online-only with no-op offline services
+- API request start/end structured logs added with correlation-aware fields
+- Download job state transitions logged by background sync worker
+- OpenTelemetry tracing + metrics wired for API + HttpClient + runtime + custom meters
+- Added readiness and liveness endpoints:
+  - `GET /health`
+  - `GET /health/live`
+  - `GET /health/ready`
+- Added API traffic hardening:
+  - global + endpoint rate limiting (`RATE_LIMIT_EXCEEDED`, `429`)
+  - payload size guard (`PAYLOAD_TOO_LARGE`, `413`)
+- Outbound integration calls now propagate `X-Correlation-Id`
+- Jackett/qBittorrent integrations now expose provider request/failure/latency metrics
+- Download sync metrics added (`download_sync_lag_seconds`, `download_sync_queue_size`)
+- Added database backup and restore scripts:
+  - `scripts/db-backup.ps1`
+  - `scripts/db-restore.ps1`
+  - `scripts/db-backup-restore-smoke.ps1`
+- Connection string now requires explicit configuration (`BOOKSHELF_CONNECTION_STRING` or `ConnectionStrings:Bookshelf`)
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 
 ## Local Commands
 ```powershell
-dotnet restore src/Bookshelf.Api/Bookshelf.Api.csproj
-dotnet build src/Bookshelf.Api/Bookshelf.Api.csproj --no-restore
-dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj --no-restore
+dotnet build Bookshelf.sln --no-restore -m:1
+dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj --no-build
 dotnet ef database update --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj
 ```
 

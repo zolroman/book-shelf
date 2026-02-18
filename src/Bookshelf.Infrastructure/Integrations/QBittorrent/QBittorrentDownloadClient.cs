@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text.Json;
 using Bookshelf.Application.Abstractions.Providers;
@@ -11,6 +12,13 @@ namespace Bookshelf.Infrastructure.Integrations.QBittorrent;
 public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
 {
     private const string ProviderCode = "qbittorrent";
+    public const string MeterName = "Bookshelf.Integrations.QBittorrent";
+
+    private static readonly Meter Meter = new(MeterName);
+    private static readonly Counter<long> RequestCounter = Meter.CreateCounter<long>("qbittorrent_requests_total");
+    private static readonly Counter<long> FailureCounter = Meter.CreateCounter<long>("qbittorrent_failures_total");
+    private static readonly Histogram<double> LatencyHistogram = Meter.CreateHistogram<double>("qbittorrent_request_duration_ms");
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<QBittorrentDownloadClient> _logger;
     private readonly QBittorrentOptions _options;
@@ -132,6 +140,7 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
             var startedAt = Stopwatch.GetTimestamp();
+            RequestCounter.Add(1, new("provider", ProviderCode), new("operation", operation));
             try
             {
                 var request = requestFactory();
@@ -156,6 +165,7 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
                     operation,
                     attempt,
                     Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+                LogLatency(startedAt, operation, success: true);
 
                 return response;
             }
@@ -166,6 +176,8 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             catch (Exception exception) when (IsTransient(exception))
             {
                 lastException = exception;
+                FailureCounter.Add(1, new("provider", ProviderCode), new("operation", operation));
+                LogLatency(startedAt, operation, success: false);
                 _logger.LogWarning(
                     exception,
                     "qBittorrent {Operation} transient failure. Attempt={Attempt}/{Attempts}",
@@ -184,6 +196,8 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             }
             catch (Exception exception)
             {
+                FailureCounter.Add(1, new("provider", ProviderCode), new("operation", operation));
+                LogLatency(startedAt, operation, success: false);
                 throw new DownloadExecutionFailedException(
                     ProviderCode,
                     $"qBittorrent {operation} failed.",
@@ -287,5 +301,15 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
         return statusCode == HttpStatusCode.RequestTimeout
             || statusCode == HttpStatusCode.TooManyRequests
             || (int)statusCode >= 500;
+    }
+
+    private static void LogLatency(long startTimestamp, string operation, bool success)
+    {
+        var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+        LatencyHistogram.Record(
+            elapsedMs,
+            new("provider", ProviderCode),
+            new("operation", operation),
+            new("success", success.ToString().ToLowerInvariant()));
     }
 }

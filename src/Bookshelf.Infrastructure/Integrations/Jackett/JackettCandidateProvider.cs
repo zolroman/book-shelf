@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text;
 using System.Xml.Linq;
@@ -11,6 +12,13 @@ namespace Bookshelf.Infrastructure.Integrations.Jackett;
 
 public sealed class JackettCandidateProvider : IDownloadCandidateProvider
 {
+    public const string MeterName = "Bookshelf.Integrations.Jackett";
+
+    private static readonly Meter Meter = new(MeterName);
+    private static readonly Counter<long> RequestCounter = Meter.CreateCounter<long>("jackett_requests_total");
+    private static readonly Counter<long> FailureCounter = Meter.CreateCounter<long>("jackett_failures_total");
+    private static readonly Histogram<double> LatencyHistogram = Meter.CreateHistogram<double>("jackett_request_duration_ms");
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<JackettCandidateProvider> _logger;
     private readonly JackettOptions _options;
@@ -57,6 +65,7 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
             var startedAt = Stopwatch.GetTimestamp();
+            RequestCounter.Add(1, new("provider", ProviderCode), new("operation", "search"));
             try
             {
                 using var response = await _httpClient.GetAsync(uri, cancellationToken);
@@ -84,12 +93,15 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
                     attempt,
                     redactedUri,
                     Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+                LogLatency(startedAt, success: true);
 
                 return payload;
             }
             catch (Exception exception) when (IsTransient(exception))
             {
                 lastException = exception;
+                FailureCounter.Add(1, new("provider", ProviderCode), new("operation", "search"));
+                LogLatency(startedAt, success: false);
                 _logger.LogWarning(
                     exception,
                     "Jackett transient failure. Attempt={Attempt}/{Attempts} Url={Url}",
@@ -110,6 +122,8 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
             catch (Exception exception)
             {
                 lastException = exception;
+                FailureCounter.Add(1, new("provider", ProviderCode), new("operation", "search"));
+                LogLatency(startedAt, success: false);
                 _logger.LogError(exception, "Jackett non-transient failure. Url={Url}", redactedUri);
                 break;
             }
@@ -195,6 +209,16 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
         return statusCode == HttpStatusCode.RequestTimeout
             || statusCode == HttpStatusCode.TooManyRequests
             || (int)statusCode >= 500;
+    }
+
+    private static void LogLatency(long startTimestamp, bool success)
+    {
+        var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+        LatencyHistogram.Record(
+            elapsedMs,
+            new("provider", "jackett"),
+            new("operation", "search"),
+            new("success", success.ToString().ToLowerInvariant()));
     }
 
     private string RedactUri(Uri uri)

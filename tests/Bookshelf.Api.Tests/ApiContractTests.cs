@@ -6,6 +6,7 @@ using Bookshelf.Application.Exceptions;
 using Bookshelf.Api.Api.Middleware;
 using Bookshelf.Shared.Contracts.Api;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -49,6 +50,74 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
         Assert.NotNull(payload);
         Assert.Equal(correlationId, payload!.CorrelationId);
+    }
+
+    [Fact]
+    public async Task Search_WhenRateLimitExceeded_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+            {
+                configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["RateLimiting:PermitLimit"] = "1",
+                    ["RateLimiting:WindowSeconds"] = "600",
+                    ["RateLimiting:QueueLimit"] = "0",
+                });
+            });
+        });
+
+        using var client = factory.CreateClient();
+
+        HttpResponseMessage? limitedResponse = null;
+        for (var attempt = 0; attempt < 150; attempt++)
+        {
+            var response = await client.GetAsync("/api/v1/search/books");
+            if (response.StatusCode == (HttpStatusCode)429)
+            {
+                limitedResponse = response;
+                break;
+            }
+        }
+
+        Assert.NotNull(limitedResponse);
+
+        var payload = await limitedResponse!.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("RATE_LIMIT_EXCEEDED", payload!.Code);
+    }
+
+    [Fact]
+    public async Task AddAndDownload_PayloadTooLarge_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+            {
+                configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["RequestLimits:MaxBodyBytes"] = "128",
+                });
+            });
+        });
+
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/library/add-and-download",
+            new AddAndDownloadRequest(
+                UserId: 1,
+                ProviderCode: "fantlab",
+                ProviderBookKey: "123",
+                MediaType: "audio",
+                CandidateId: new string('a', 300_000)));
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("PAYLOAD_TOO_LARGE", payload!.Code);
     }
 
     [Fact]

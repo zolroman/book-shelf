@@ -11,9 +11,11 @@ namespace Bookshelf.Infrastructure.Integrations.FantLab;
 
 public sealed class FantLabMetadataProvider : IMetadataProvider
 {
+    public const string MeterName = "Bookshelf.Integrations.FantLab";
+
     private const string RequestTypeSearch = "search";
     private const string RequestTypeDetails = "details";
-    private static readonly Meter Meter = new("Bookshelf.Integrations.FantLab");
+    private static readonly Meter Meter = new(MeterName);
     private static readonly Counter<long> RequestCounter = Meter.CreateCounter<long>("fantlab_requests_total");
     private static readonly Counter<long> FailureCounter = Meter.CreateCounter<long>("fantlab_failures_total");
     private static readonly Histogram<double> LatencyHistogram = Meter.CreateHistogram<double>("fantlab_request_duration_ms");
