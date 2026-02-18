@@ -1,4 +1,4 @@
-# BookShelf Phase 2 Runbook
+# BookShelf Phase 3 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
@@ -47,6 +47,16 @@ dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj
 dotnet ef migrations list --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj
 dotnet ef database update --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj
 ```
+
+## FantLab Configuration
+Environment keys supported by the server:
+- `FANTLAB_ENABLED` (default `true`)
+- `FANTLAB_BASE_URL`
+- `FANTLAB_SEARCH_PATH`
+- `FANTLAB_BOOK_DETAILS_PATH`
+- `FANTLAB_TIMEOUT_SECONDS` (default `10`)
+- `FANTLAB_MAX_RETRIES` (default `2`)
+- `FANTLAB_RETRY_DELAY_MS` (default `300`)
 
 ## Run API
 ```powershell

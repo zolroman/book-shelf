@@ -1,4 +1,6 @@
 using System.Net;
+using Bookshelf.Application.Abstractions.Services;
+using Bookshelf.Application.Exceptions;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Shared.Contracts.Api;
 
@@ -6,6 +8,8 @@ namespace Bookshelf.Api.Api;
 
 public static class V1Endpoints
 {
+    private const string FantLabProviderCode = "fantlab";
+
     public static IEndpointRouteBuilder MapV1Endpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/api/v1");
@@ -32,7 +36,13 @@ public static class V1Endpoints
         return app;
     }
 
-    private static IResult SearchBooks(string? title, string? author, int? page, int? pageSize)
+    private static async Task<IResult> SearchBooks(
+        string? title,
+        string? author,
+        int? page,
+        int? pageSize,
+        IBookSearchService searchService,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(author))
         {
@@ -45,33 +55,66 @@ public static class V1Endpoints
         var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
         var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
 
-        var response = new SearchBooksResponse(
-            Query: new SearchBooksQuery(title?.Trim(), author?.Trim()),
-            Page: safePage,
-            PageSize: safePageSize,
-            Total: 0,
-            Items: Array.Empty<SearchBookItemDto>());
+        try
+        {
+            var response = await searchService.SearchAsync(
+                title,
+                author,
+                safePage,
+                safePageSize,
+                cancellationToken);
 
-        return Results.Ok(response);
+            return Results.Ok(response);
+        }
+        catch (MetadataProviderUnavailableException exception)
+        {
+            throw new ApiException(
+                ApiErrorCodes.FantlabUnavailable,
+                $"Metadata provider '{exception.ProviderCode}' is unavailable.",
+                HttpStatusCode.BadGateway);
+        }
     }
 
-    private static IResult GetSearchBookDetails(string providerCode, string providerBookKey)
+    private static async Task<IResult> GetSearchBookDetails(
+        string providerCode,
+        string providerBookKey,
+        IBookSearchService searchService,
+        CancellationToken cancellationToken)
     {
         EnsureRequired(providerCode, nameof(providerCode));
         EnsureRequired(providerBookKey, nameof(providerBookKey));
+        if (!providerCode.Equals(FantLabProviderCode, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "Unsupported providerCode for v1. Expected 'fantlab'.",
+                HttpStatusCode.BadRequest);
+        }
 
-        var response = new SearchBookDetailsResponse(
-            ProviderCode: providerCode,
-            ProviderBookKey: providerBookKey,
-            Title: "Placeholder Book",
-            OriginalTitle: null,
-            Description: null,
-            PublishYear: null,
-            CoverUrl: null,
-            Authors: Array.Empty<string>(),
-            Series: null);
+        try
+        {
+            var response = await searchService.GetDetailsAsync(
+                providerCode,
+                providerBookKey,
+                cancellationToken);
 
-        return Results.Ok(response);
+            if (response is null)
+            {
+                throw new ApiException(
+                    ApiErrorCodes.BookNotFound,
+                    "Book was not found in metadata provider.",
+                    HttpStatusCode.NotFound);
+            }
+
+            return Results.Ok(response);
+        }
+        catch (MetadataProviderUnavailableException exception)
+        {
+            throw new ApiException(
+                ApiErrorCodes.FantlabUnavailable,
+                $"Metadata provider '{exception.ProviderCode}' is unavailable.",
+                HttpStatusCode.BadGateway);
+        }
     }
 
     private static IResult GetCandidates(

@@ -99,4 +99,17 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.NotNull(payload);
         Assert.Equal("INVALID_ARGUMENT", payload!.Code);
     }
+
+    [Fact]
+    public async Task Details_UnsupportedProvider_ReturnsInvalidArgument()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/search/books/other/123");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("INVALID_ARGUMENT", payload!.Code);
+    }
 }

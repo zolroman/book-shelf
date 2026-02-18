@@ -1,3 +1,5 @@
+using Bookshelf.Application.Abstractions.Services;
+using Bookshelf.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Bookshelf.Application;
@@ -6,6 +8,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddBookshelfApplication(this IServiceCollection services)
     {
+        services.AddScoped<IBookSearchService, BookSearchService>();
         return services;
     }
 }
