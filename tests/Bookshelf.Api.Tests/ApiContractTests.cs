@@ -519,6 +519,8 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
                             PublishYear: 1965,
                             LanguageCode: "en",
                             CoverUrl: "https://images.example/dune.jpg",
+                            HasTextMedia: true,
+                            HasAudioMedia: false,
                             CatalogState: "library",
                             CreatedAtUtc: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
                             UpdatedAtUtc: new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero)),

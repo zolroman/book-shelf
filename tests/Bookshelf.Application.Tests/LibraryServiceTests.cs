@@ -36,6 +36,9 @@ public class LibraryServiceTests
         Assert.Equal(2, response.Total);
         Assert.Equal(2, response.Items.Count);
         Assert.Contains(response.Items, item => item.CatalogState == "library");
+        var dune = Assert.Single(response.Items, item => item.Id == 1);
+        Assert.True(dune.HasTextMedia);
+        Assert.False(dune.HasAudioMedia);
     }
 
     [Fact]
@@ -60,6 +63,11 @@ public class LibraryServiceTests
         var book = new Book("fantlab", id.ToString(), title);
         SetProperty(book, "Id", id);
         SetProperty(book, "CatalogState", state);
+        if (state == CatalogState.Library)
+        {
+            book.UpsertMediaAsset(MediaType.Text, "https://tracker.example/item", "jackett");
+        }
+
         return book;
     }
 

@@ -62,6 +62,8 @@ public sealed class LibraryService : ILibraryService
                 PublishYear: x.PublishYear,
                 LanguageCode: x.LanguageCode,
                 CoverUrl: x.CoverUrl,
+                HasTextMedia: x.MediaAssets.Any(asset => asset.MediaType == MediaType.Text && asset.Status == MediaAssetStatus.Available),
+                HasAudioMedia: x.MediaAssets.Any(asset => asset.MediaType == MediaType.Audio && asset.Status == MediaAssetStatus.Available),
                 CatalogState: x.CatalogState.ToString().ToLowerInvariant(),
                 CreatedAtUtc: x.CreatedAtUtc,
                 UpdatedAtUtc: x.UpdatedAtUtc))

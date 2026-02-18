@@ -1,10 +1,23 @@
 using Bookshelf.Web.Components;
+using Bookshelf.Shared.Client;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.Configure<BookshelfApiOptions>(builder.Configuration.GetSection("BookshelfApi"));
+builder.Services.AddScoped<UserSessionState>();
+builder.Services.AddHttpClient<IBookshelfApiClient, BookshelfApiClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<BookshelfApiOptions>>().Value;
+    var configuredBaseUrl = options.BaseUrl?.Trim();
+    var baseUrl = string.IsNullOrWhiteSpace(configuredBaseUrl)
+        ? "http://localhost:5000"
+        : configuredBaseUrl;
+    client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+});
 
 var app = builder.Build();
 

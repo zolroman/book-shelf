@@ -1,0 +1,276 @@
+@page "/books/{ProviderCode}/{ProviderBookKey}"
+@inject IBookshelfApiClient ApiClient
+
+<PageTitle>Book Details</PageTitle>
+
+@if (_isLoading)
+{
+    <p class="state-text">Loading book details...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel state-panel state-error" role="alert">
+        <h1>Book Details</h1>
+        <p>@_error</p>
+        <button class="btn btn-secondary touch-target" type="button" @onclick="LoadAsync">Retry</button>
+    </section>
+}
+else if (_details is not null)
+{
+    <section class="page-block">
+        <div class="panel">
+            <h1>@_details.Title</h1>
+            <p class="result-meta">@string.Join(", ", _details.Authors)</p>
+            @if (!string.IsNullOrWhiteSpace(_details.OriginalTitle))
+            {
+                <p class="result-meta">Original title: @_details.OriginalTitle</p>
+            }
+            @if (_details.PublishYear.HasValue)
+            {
+                <p class="result-meta">Publish year: @_details.PublishYear.Value</p>
+            }
+            @if (_details.Series is not null)
+            {
+                <p class="result-meta">Series: @_details.Series.Title (book @_details.Series.Order)</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_details.Description))
+            {
+                <p class="detail-description">@_details.Description</p>
+            }
+        </div>
+    </section>
+
+    <section class="page-block">
+        <div class="panel">
+            <div class="list-head">
+                <h2>Download Candidates</h2>
+                <span>User chooses media type manually.</span>
+            </div>
+
+            <div class="grid-2">
+                <div class="candidate-group">
+                    <h3>Text</h3>
+                    @RenderCandidates("text", _textCandidates)
+                </div>
+                <div class="candidate-group">
+                    <h3>Audio</h3>
+                    @RenderCandidates("audio", _audioCandidates)
+                </div>
+            </div>
+
+            @if ((_textCandidates?.Items.Count ?? 0) == 0 && (_audioCandidates?.Items.Count ?? 0) == 0)
+            {
+                <p class="state-text">No download options found</p>
+            }
+
+            <div class="action-row">
+                <button
+                    class="btn touch-target"
+                    type="button"
+                    disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_selectedCandidateId) || string.IsNullOrWhiteSpace(_selectedMediaType))"
+                    @onclick="AddAndDownloadAsync">
+                    Add to Library
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_actionMessage))
+            {
+                <p class="@($"inline-message {_actionMessageCssClass}")">@_actionMessage</p>
+            }
+
+            @if (_lastJob is not null)
+            {
+                <div class="job-card">
+                    <div><strong>Job:</strong> #@_lastJob.DownloadJob.Id</div>
+                    <div><strong>Status:</strong> @_lastJob.DownloadJob.Status</div>
+                    <div><strong>External ID:</strong> @(_lastJob.DownloadJob.ExternalJobId ?? "-")</div>
+                    <div><strong>Created:</strong> @_lastJob.DownloadJob.CreatedAtUtc.ToString("u")</div>
+                </div>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public string ProviderCode { get; set; } = string.Empty;
+
+    [Parameter]
+    public string ProviderBookKey { get; set; } = string.Empty;
+
+    private SearchBookDetailsResponse? _details;
+    private DownloadCandidatesResponse? _textCandidates;
+    private DownloadCandidatesResponse? _audioCandidates;
+    private AddAndDownloadResponse? _lastJob;
+    private bool _isLoading;
+    private bool _isSubmitting;
+    private string? _selectedMediaType;
+    private string? _selectedCandidateId;
+    private string? _error;
+    private string? _actionMessage;
+    private string _actionMessageCssClass = "inline-message-info";
+    private readonly Dictionary<string, long> _lastJobByMedia = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        _details = null;
+        _textCandidates = null;
+        _audioCandidates = null;
+        _selectedMediaType = null;
+        _selectedCandidateId = null;
+        _lastJob = null;
+        _actionMessage = null;
+
+        try
+        {
+            _details = await ApiClient.GetBookDetailsAsync(ProviderCode, ProviderBookKey);
+            var textTask = ApiClient.GetCandidatesAsync(ProviderCode, ProviderBookKey, "text");
+            var audioTask = ApiClient.GetCandidatesAsync(ProviderCode, ProviderBookKey, "audio");
+            await Task.WhenAll(textTask, audioTask);
+            _textCandidates = textTask.Result;
+            _audioCandidates = audioTask.Result;
+        }
+        catch (ApiClientException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private RenderFragment RenderCandidates(string mediaType, DownloadCandidatesResponse? response) => builder =>
+    {
+        if (response is null)
+        {
+            builder.AddMarkupContent(0, "<p class=\"state-text\">Loading candidates...</p>");
+            return;
+        }
+
+        if (response.Items.Count == 0)
+        {
+            builder.AddMarkupContent(1, "<p class=\"state-text\">No options</p>");
+            return;
+        }
+
+        var index = 2;
+        builder.OpenElement(index++, "ul");
+        builder.AddAttribute(index++, "class", "candidate-list");
+
+        foreach (var item in response.Items)
+        {
+            var inputId = $"candidate-{mediaType}-{item.CandidateId.Replace(':', '-')}";
+            builder.OpenElement(index++, "li");
+            builder.AddAttribute(index++, "class", "candidate-item");
+
+            builder.OpenElement(index++, "input");
+            builder.AddAttribute(index++, "type", "radio");
+            builder.AddAttribute(index++, "name", "selectedCandidate");
+            builder.AddAttribute(index++, "id", inputId);
+            builder.AddAttribute(index++, "value", item.CandidateId);
+            builder.AddAttribute(index++, "checked", _selectedCandidateId == item.CandidateId);
+            builder.AddAttribute(index++, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, _ =>
+            {
+                _selectedCandidateId = item.CandidateId;
+                _selectedMediaType = mediaType;
+            }));
+            builder.CloseElement();
+
+            builder.OpenElement(index++, "label");
+            builder.AddAttribute(index++, "for", inputId);
+            builder.AddAttribute(index++, "class", "candidate-label");
+
+            builder.OpenElement(index++, "span");
+            builder.AddAttribute(index++, "class", "candidate-title");
+            builder.AddContent(index++, item.Title);
+            builder.CloseElement();
+
+            builder.OpenElement(index++, "span");
+            builder.AddAttribute(index++, "class", "candidate-meta");
+            builder.AddContent(index++, $"Seeders: {item.Seeders?.ToString() ?? "-"} | Size: {FormatSize(item.SizeBytes)}");
+            builder.CloseElement();
+
+            builder.OpenElement(index++, "a");
+            builder.AddAttribute(index++, "href", item.SourceUrl);
+            builder.AddAttribute(index++, "target", "_blank");
+            builder.AddAttribute(index++, "rel", "noreferrer");
+            builder.AddContent(index++, "Source");
+            builder.CloseElement();
+
+            builder.CloseElement();
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    };
+
+    private async Task AddAndDownloadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedCandidateId) || string.IsNullOrWhiteSpace(_selectedMediaType))
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+        _actionMessage = null;
+
+        try
+        {
+            var response = await ApiClient.AddAndDownloadAsync(
+                ProviderCode,
+                ProviderBookKey,
+                _selectedMediaType,
+                _selectedCandidateId);
+
+            _lastJob = response;
+
+            if (_lastJobByMedia.TryGetValue(_selectedMediaType, out var existingJobId) &&
+                existingJobId == response.DownloadJob.Id)
+            {
+                _actionMessageCssClass = "inline-message-info";
+                _actionMessage = "Download already in progress";
+            }
+            else
+            {
+                _actionMessageCssClass = "inline-message-success";
+                _actionMessage = "Download started";
+            }
+
+            _lastJobByMedia[_selectedMediaType] = response.DownloadJob.Id;
+        }
+        catch (ApiClientException exception)
+        {
+            _actionMessageCssClass = "inline-message-error";
+            _actionMessage = exception.Message;
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private static string FormatSize(long? sizeBytes)
+    {
+        if (!sizeBytes.HasValue || sizeBytes.Value <= 0)
+        {
+            return "-";
+        }
+
+        const double oneMb = 1024d * 1024d;
+        const double oneGb = oneMb * 1024d;
+        if (sizeBytes.Value >= oneGb)
+        {
+            return $"{sizeBytes.Value / oneGb:F2} GB";
+        }
+
+        return $"{sizeBytes.Value / oneMb:F0} MB";
+    }
+}

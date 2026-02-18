@@ -1,4 +1,4 @@
-# BookShelf Phase 7 Runbook
+# BookShelf Phase 8 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
@@ -89,6 +89,18 @@ Environment keys supported by the server:
 - `GET /api/v1/library` requires bearer authentication.
 - Development token format: `Authorization: Bearer uid:{userId}` (for example `Bearer uid:1`).
 - `userId` is read from token claims and used as user context.
+
+## UI API Base URL Configuration
+- Web host config key: `BookshelfApi:BaseUrl` (default `http://localhost:5000`).
+- MAUI app config:
+  - `BookshelfApi:BaseUrl` (if provided by MAUI configuration), or
+  - environment variable `BOOKSHELF_API_BASE_URL`.
+- UI endpoints consumed in Phase 8:
+  - Search: `/`, `/search`
+  - Details: `/books/{providerCode}/{providerBookKey}`
+  - Jobs: `/jobs`
+  - Library: `/library`
+  - Shelves: `/shelves`
 
 ## Run API
 ```powershell

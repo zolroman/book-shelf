@@ -1,0 +1,213 @@
+@page "/shelves"
+@inject IBookshelfApiClient ApiClient
+
+<PageTitle>Shelves</PageTitle>
+
+<section class="page-block">
+    <h1>Shelves</h1>
+    <p class="page-subtitle">Create personal shelves and manage their book references.</p>
+
+    <div class="panel">
+        <div class="action-row">
+            <label class="field field-inline">
+                <span>New shelf</span>
+                <input class="touch-target" @bind="_newShelfName" @bind:event="oninput" />
+            </label>
+            <button class="btn touch-target" type="button" @onclick="CreateShelfAsync">Create Shelf</button>
+        </div>
+    </div>
+</section>
+
+@if (_isLoading)
+{
+    <p class="state-text">Loading shelves...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel state-panel state-error" role="alert">
+        <h2>Shelves request failed</h2>
+        <p>@_error</p>
+        <button class="btn btn-secondary touch-target" type="button" @onclick="LoadAsync">Retry</button>
+    </section>
+}
+else if (_response is not null && _response.Items.Count == 0)
+{
+    <section class="panel state-panel">
+        <h2>Create your first shelf</h2>
+        <p>Shelves keep personal references to books from the shared catalog.</p>
+    </section>
+}
+else if (_response is not null)
+{
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p class="@($"inline-message {_messageCssClass}")">@_message</p>
+    }
+
+    <section class="panel">
+        <ul class="result-list">
+            @foreach (var shelf in _response.Items.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                <li class="result-card">
+                    <div class="result-main">
+                        <div class="result-title">@shelf.Name</div>
+                        <div class="result-meta">Shelf #@shelf.Id | Created @shelf.CreatedAtUtc.ToString("u")</div>
+                        <div class="book-chip-list">
+                            @if (shelf.BookIds.Count == 0)
+                            {
+                                <span class="state-text">No books yet</span>
+                            }
+                            else
+                            {
+                                @foreach (var bookId in shelf.BookIds)
+                                {
+                                    <span class="book-chip">
+                                        Book @bookId
+                                        <button
+                                            class="chip-remove touch-target"
+                                            type="button"
+                                            @onclick="() => RemoveBookAsync(shelf.Id, bookId)">
+                                            remove
+                                        </button>
+                                    </span>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                    <div class="shelf-add-row">
+                        <input
+                            class="touch-target"
+                            placeholder="Book ID"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            type="number"
+                            min="1"
+                            @bind="_bookInputByShelf[shelf.Id]"
+                            @bind:event="oninput" />
+                        <button class="btn btn-secondary touch-target" type="button" @onclick="() => AddBookAsync(shelf.Id)">
+                            Add
+                        </button>
+                    </div>
+                </li>
+            }
+        </ul>
+    </section>
+}
+
+@code {
+    private ShelvesResponse? _response;
+    private bool _isLoading;
+    private string? _error;
+    private string? _message;
+    private string _messageCssClass = "inline-message-info";
+    private string _newShelfName = string.Empty;
+    private readonly Dictionary<long, string?> _bookInputByShelf = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+
+        try
+        {
+            _response = await ApiClient.GetShelvesAsync();
+            foreach (var shelf in _response.Items)
+            {
+                if (!_bookInputByShelf.ContainsKey(shelf.Id))
+                {
+                    _bookInputByShelf[shelf.Id] = null;
+                }
+            }
+        }
+        catch (ApiClientException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CreateShelfAsync()
+    {
+        _message = null;
+        _error = null;
+        var name = _newShelfName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _messageCssClass = "inline-message-error";
+            _message = "Shelf name is required.";
+            return;
+        }
+
+        try
+        {
+            await ApiClient.CreateShelfAsync(name);
+            _newShelfName = string.Empty;
+            _messageCssClass = "inline-message-success";
+            _message = "Shelf created.";
+            await LoadAsync();
+        }
+        catch (ApiClientException exception)
+        {
+            _messageCssClass = "inline-message-error";
+            _message = exception.Message;
+        }
+    }
+
+    private async Task AddBookAsync(long shelfId)
+    {
+        _message = null;
+        _error = null;
+
+        if (!_bookInputByShelf.TryGetValue(shelfId, out var rawBookId) ||
+            string.IsNullOrWhiteSpace(rawBookId) ||
+            !long.TryParse(rawBookId, out var bookId) ||
+            bookId <= 0)
+        {
+            _messageCssClass = "inline-message-error";
+            _message = "Book ID must be a positive number.";
+            return;
+        }
+
+        try
+        {
+            await ApiClient.AddBookToShelfAsync(shelfId, bookId);
+            _bookInputByShelf[shelfId] = null;
+            _messageCssClass = "inline-message-success";
+            _message = "Book added to shelf.";
+            await LoadAsync();
+        }
+        catch (ApiClientException exception)
+        {
+            _messageCssClass = "inline-message-error";
+            _message = exception.Message;
+        }
+    }
+
+    private async Task RemoveBookAsync(long shelfId, long bookId)
+    {
+        _message = null;
+        _error = null;
+
+        try
+        {
+            await ApiClient.RemoveBookFromShelfAsync(shelfId, bookId);
+            _messageCssClass = "inline-message-success";
+            _message = "Book removed from shelf.";
+            await LoadAsync();
+        }
+        catch (ApiClientException exception)
+        {
+            _messageCssClass = "inline-message-error";
+            _message = exception.Message;
+        }
+    }
+}

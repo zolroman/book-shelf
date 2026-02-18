@@ -70,6 +70,8 @@ public sealed record LibraryBookDto(
     int? PublishYear,
     string? LanguageCode,
     string? CoverUrl,
+    bool HasTextMedia,
+    bool HasAudioMedia,
     string CatalogState,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);

@@ -1,0 +1,253 @@
+@page "/library"
+@inject IBookshelfApiClient ApiClient
+
+<PageTitle>Library</PageTitle>
+
+<section class="page-block">
+    <h1>Library</h1>
+    <p class="page-subtitle">Global catalog view with personal shelf assignment actions.</p>
+
+    <div class="panel">
+        <div class="grid-3">
+            <label class="field">
+                <span>Query</span>
+                <input class="touch-target" @bind="_query" @bind:event="oninput" />
+            </label>
+
+            <label class="field">
+                <span>Provider</span>
+                <input class="touch-target" @bind="_providerCode" @bind:event="oninput" placeholder="fantlab" />
+            </label>
+
+            <label class="field">
+                <span>Catalog State</span>
+                <select class="touch-target" @bind="_catalogState">
+                    <option value="">Any</option>
+                    <option value="library">Library</option>
+                    <option value="archive">Archive</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="action-row">
+            <label class="field field-inline">
+                <input type="checkbox" @bind="_includeArchived" />
+                <span>Include archived</span>
+            </label>
+            <button class="btn btn-secondary touch-target" type="button" @onclick="ApplyFilterAsync">Apply Filters</button>
+        </div>
+    </div>
+</section>
+
+@if (_isLoading)
+{
+    <p class="state-text">Loading library...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel state-panel state-error" role="alert">
+        <h2>Library request failed</h2>
+        <p>@_error</p>
+        <button class="btn btn-secondary touch-target" type="button" @onclick="ReloadAsync">Retry</button>
+    </section>
+}
+else if (_library is not null && _library.Items.Count == 0)
+{
+    <section class="panel state-panel">
+        <h2>Library is empty</h2>
+        <p>No books match the selected filters.</p>
+    </section>
+}
+else if (_library is not null)
+{
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p class="@($"inline-message {_messageCssClass}")">@_message</p>
+    }
+
+    <section class="panel">
+        <ul class="result-list">
+            @foreach (var book in _library.Items)
+            {
+                <li class="result-card">
+                    <div class="result-main">
+                        <div class="result-title">@book.Title</div>
+                        <div class="result-meta">@book.ProviderCode/@book.ProviderBookKey | @book.CatalogState</div>
+                        @if (!string.IsNullOrWhiteSpace(book.Description))
+                        {
+                            <p class="result-meta">@book.Description</p>
+                        }
+                    </div>
+
+                    <div class="library-actions">
+                        <button
+                            class="btn btn-secondary touch-target"
+                            type="button"
+                            disabled="@(!book.HasTextMedia)"
+                            @onclick="ShowReaderPendingMessage">
+                            Read
+                        </button>
+                        <button
+                            class="btn btn-secondary touch-target"
+                            type="button"
+                            disabled="@(!book.HasAudioMedia)"
+                            @onclick="ShowReaderPendingMessage">
+                            Listen
+                        </button>
+
+                        <div class="shelf-add-row">
+                            <select class="touch-target" @bind="_shelfSelectionByBook[book.Id]">
+                                <option value="">Select shelf</option>
+                                @if (_shelves is not null)
+                                {
+                                    @foreach (var shelf in _shelves.Items)
+                                    {
+                                        <option value="@shelf.Id">@shelf.Name</option>
+                                    }
+                                }
+                            </select>
+                            <button class="btn touch-target" type="button" @onclick="() => AddBookToShelfAsync(book.Id)">Add to Shelf</button>
+                        </div>
+                    </div>
+                </li>
+            }
+        </ul>
+
+        <div class="pagination">
+            <button
+                class="btn btn-secondary touch-target"
+                type="button"
+                disabled="@(_library.Page <= 1)"
+                @onclick="PreviousPageAsync">
+                Previous
+            </button>
+            <button
+                class="btn btn-secondary touch-target"
+                type="button"
+                disabled="@((_library.Page * _library.PageSize) >= _library.Total)"
+                @onclick="NextPageAsync">
+                Next
+            </button>
+        </div>
+    </section>
+}
+
+@code {
+    private const int DefaultPageSize = 20;
+
+    private LibraryResponse? _library;
+    private ShelvesResponse? _shelves;
+    private bool _isLoading;
+    private string? _error;
+    private string? _message;
+    private string _messageCssClass = "inline-message-info";
+    private int _page = 1;
+    private bool _includeArchived;
+    private string? _query;
+    private string? _providerCode;
+    private string? _catalogState;
+    private readonly Dictionary<long, string?> _shelfSelectionByBook = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadAsync(true);
+    }
+
+    private async Task ApplyFilterAsync()
+    {
+        await LoadAsync(true, 1);
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        await LoadAsync(true, Math.Max(1, _page - 1));
+    }
+
+    private async Task NextPageAsync()
+    {
+        await LoadAsync(true, _page + 1);
+    }
+
+    private async Task LoadAsync(bool showLoading, int? page = null)
+    {
+        _message = null;
+        _error = null;
+        if (showLoading)
+        {
+            _isLoading = true;
+        }
+
+        try
+        {
+            _page = page ?? _page;
+            var libraryTask = ApiClient.GetLibraryAsync(
+                _includeArchived,
+                _query,
+                _providerCode,
+                _catalogState,
+                _page,
+                DefaultPageSize);
+            var shelvesTask = ApiClient.GetShelvesAsync();
+
+            await Task.WhenAll(libraryTask, shelvesTask);
+            _library = libraryTask.Result;
+            _shelves = shelvesTask.Result;
+
+            foreach (var book in _library.Items)
+            {
+                if (!_shelfSelectionByBook.ContainsKey(book.Id))
+                {
+                    _shelfSelectionByBook[book.Id] = null;
+                }
+            }
+        }
+        catch (ApiClientException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task AddBookToShelfAsync(long bookId)
+    {
+        _message = null;
+        _error = null;
+
+        if (!_shelfSelectionByBook.TryGetValue(bookId, out var rawShelfId) ||
+            string.IsNullOrWhiteSpace(rawShelfId) ||
+            !long.TryParse(rawShelfId, out var shelfId) ||
+            shelfId <= 0)
+        {
+            _messageCssClass = "inline-message-error";
+            _message = "Select a shelf first.";
+            return;
+        }
+
+        try
+        {
+            await ApiClient.AddBookToShelfAsync(shelfId, bookId);
+            _shelves = await ApiClient.GetShelvesAsync();
+            _messageCssClass = "inline-message-success";
+            _message = "Book added to shelf.";
+        }
+        catch (ApiClientException exception)
+        {
+            _messageCssClass = "inline-message-error";
+            _message = exception.Message;
+        }
+    }
+
+    private void ShowReaderPendingMessage()
+    {
+        _messageCssClass = "inline-message-info";
+        _message = "Reader/listener views are delivered in Phase 9.";
+    }
+}

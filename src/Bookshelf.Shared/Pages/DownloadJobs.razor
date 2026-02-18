@@ -1,0 +1,253 @@
+@page "/jobs"
+@implements IAsyncDisposable
+@inject IBookshelfApiClient ApiClient
+
+<PageTitle>Download Jobs</PageTitle>
+
+<section class="page-block">
+    <h1>Download Jobs</h1>
+    <p class="page-subtitle">Active jobs auto-refresh every 15 seconds while this page is open.</p>
+
+    <div class="panel">
+        <div class="action-row">
+            <label class="field field-inline">
+                <span>Status</span>
+                <select class="touch-target" @bind="_statusFilter">
+                    <option value="">All</option>
+                    <option value="queued">Queued</option>
+                    <option value="downloading">Downloading</option>
+                    <option value="completed">Completed</option>
+                    <option value="failed">Failed</option>
+                    <option value="canceled">Canceled</option>
+                </select>
+            </label>
+            <button class="btn btn-secondary touch-target" type="button" @onclick="ApplyFilterAsync">Apply Filter</button>
+        </div>
+    </div>
+</section>
+
+@if (_isLoading)
+{
+    <p class="state-text">Loading jobs...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel state-panel state-error" role="alert">
+        <h2>Jobs request failed</h2>
+        <p>@_error</p>
+        <button class="btn btn-secondary touch-target" type="button" @onclick="ReloadAsync">Retry</button>
+    </section>
+}
+else if (_response is not null && _response.Items.Count == 0)
+{
+    <section class="panel state-panel">
+        <h2>No jobs</h2>
+        <p>No download jobs match the selected filter.</p>
+    </section>
+}
+else if (_response is not null)
+{
+    <section class="panel">
+        <ul class="result-list">
+            @foreach (var job in _response.Items)
+            {
+                <li class="result-card">
+                    <div class="result-main">
+                        <div class="result-title">Job #@job.Id</div>
+                        <div class="result-meta">
+                            Book @job.BookId | @job.MediaType | Created @job.CreatedAtUtc.ToString("u")
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(job.FailureReason))
+                        {
+                            <div class="result-meta">Failure: @job.FailureReason</div>
+                        }
+                    </div>
+
+                    <div class="job-actions">
+                        <span class="@($"badge {GetStatusClass(job.Status)}")">@job.Status</span>
+                        @if (CanCancel(job.Status))
+                        {
+                            <button
+                                class="btn btn-danger touch-target"
+                                type="button"
+                                disabled="@_isCancelling"
+                                @onclick="() => CancelJobAsync(job.Id)">
+                                Cancel
+                            </button>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+
+        <div class="pagination">
+            <button
+                class="btn btn-secondary touch-target"
+                type="button"
+                disabled="@(_response.Page <= 1)"
+                @onclick="PreviousPageAsync">
+                Previous
+            </button>
+            <button
+                class="btn btn-secondary touch-target"
+                type="button"
+                disabled="@((_response.Page * _response.PageSize) >= _response.Total)"
+                @onclick="NextPageAsync">
+                Next
+            </button>
+        </div>
+    </section>
+}
+
+@code {
+    private const int DefaultPageSize = 20;
+
+    private DownloadJobsResponse? _response;
+    private bool _isLoading;
+    private bool _isCancelling;
+    private string? _error;
+    private string? _statusFilter;
+    private int _page = 1;
+    private CancellationTokenSource? _refreshCancellation;
+    private Task? _refreshTask;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        StartRefreshLoop();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadAsync(true);
+    }
+
+    private async Task ApplyFilterAsync()
+    {
+        await LoadAsync(true, 1);
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        await LoadAsync(true, Math.Max(1, _page - 1));
+    }
+
+    private async Task NextPageAsync()
+    {
+        await LoadAsync(true, _page + 1);
+    }
+
+    private async Task LoadAsync(bool showLoading, int? page = null)
+    {
+        _error = null;
+        if (showLoading)
+        {
+            _isLoading = true;
+        }
+
+        try
+        {
+            _page = page ?? _page;
+            _response = await ApiClient.ListDownloadJobsAsync(
+                _statusFilter,
+                _page,
+                DefaultPageSize);
+        }
+        catch (ApiClientException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CancelJobAsync(long jobId)
+    {
+        _isCancelling = true;
+        _error = null;
+
+        try
+        {
+            await ApiClient.CancelDownloadJobAsync(jobId);
+            await LoadAsync(false);
+        }
+        catch (ApiClientException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isCancelling = false;
+        }
+    }
+
+    private static bool CanCancel(string status)
+    {
+        return status.Equals("queued", StringComparison.OrdinalIgnoreCase) ||
+               status.Equals("downloading", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetStatusClass(string status)
+    {
+        return status.ToLowerInvariant() switch
+        {
+            "queued" => "status-queued",
+            "downloading" => "status-downloading",
+            "completed" => "status-completed",
+            "failed" => "status-failed",
+            "canceled" => "status-canceled",
+            _ => "status-queued",
+        };
+    }
+
+    private void StartRefreshLoop()
+    {
+        _refreshCancellation = new CancellationTokenSource();
+        _refreshTask = RefreshLoopAsync(_refreshCancellation.Token);
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (_response is null || !_response.Items.Any(item => CanCancel(item.Status)))
+                {
+                    continue;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    if (!_isCancelling)
+                    {
+                        await LoadAsync(false);
+                        StateHasChanged();
+                    }
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refreshCancellation is null)
+        {
+            return;
+        }
+
+        _refreshCancellation.Cancel();
+        if (_refreshTask is not null)
+        {
+            await _refreshTask;
+        }
+
+        _refreshCancellation.Dispose();
+    }
+}

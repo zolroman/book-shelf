@@ -13,7 +13,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 7 Catalog Baseline
+## Phase 8 UI Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
@@ -41,6 +41,15 @@ Requirements are defined in `requirements/` and are the source of truth.
 - Shelf uniqueness and duplicate-book constraints are enforced by service + API contract mapping
 - Added `GET /api/v1/library` with pagination, optional filters, and `includeArchived` toggle
 - Library endpoint is token-based: user context is resolved from bearer-token claims
+- Shared API client (`Bookshelf.Shared.Client`) added for web and MAUI hosts
+- Search UI flow implemented (`/` and `/search`) with loading/error/empty states and catalog badges
+- Book details flow implemented (`/books/{providerCode}/{providerBookKey}`) with grouped `text`/`audio` candidates
+- Add-and-download UI action implemented with immediate job feedback card
+- Download jobs page implemented (`/jobs`) with 15-second active-job auto-refresh and cancel action
+- Library page implemented (`/library`) with filters, pagination, `includeArchived`, and shelf-assignment actions
+- Shelves page implemented (`/shelves`) with create/add/remove shelf-book operations
+- Library API response now includes media availability flags (`hasTextMedia`, `hasAudioMedia`) for UI actions
+- Web and MAUI hosts now support configurable API base URL
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 

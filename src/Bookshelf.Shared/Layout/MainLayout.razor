@@ -1,9 +1,73 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+@inject UserSessionState UserSessionState
 
-@Body
+<div class="app-shell">
+    <header class="top-bar">
+        <a class="brand" href="/">
+            <span class="brand-mark">BS</span>
+            <span>BookShelf</span>
+        </a>
+
+        <nav class="top-nav" aria-label="Primary navigation">
+            <NavLink href="/" Match="NavLinkMatch.All">Search</NavLink>
+            <NavLink href="/jobs">Jobs</NavLink>
+            <NavLink href="/library">Library</NavLink>
+            <NavLink href="/shelves">Shelves</NavLink>
+        </nav>
+
+        <div class="session-panel">
+            <label class="session-label" for="user-id-input">User ID</label>
+            <input
+                id="user-id-input"
+                class="session-input touch-target"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                type="number"
+                min="1"
+                @bind="_userIdInput"
+                @bind:event="oninput" />
+            <button class="btn btn-secondary touch-target" type="button" @onclick="ApplyUserId">
+                Apply
+            </button>
+        </div>
+    </header>
+
+    <div class="session-token-hint">
+        Library auth header: <code>Bearer uid:@UserSessionState.UserId</code>
+    </div>
+
+    <main class="page-content">
+        @Body
+    </main>
+</div>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <span class="dismiss">X</span>
 </div>
+
+@code {
+    private long _userIdInput;
+
+    protected override void OnInitialized()
+    {
+        _userIdInput = UserSessionState.UserId;
+    }
+
+    private void ApplyUserId()
+    {
+        if (_userIdInput <= 0)
+        {
+            _userIdInput = UserSessionState.UserId;
+            return;
+        }
+
+        UserSessionState.UserId = _userIdInput;
+        if (NavigationManager.Uri.EndsWith("/library", StringComparison.OrdinalIgnoreCase))
+        {
+            NavigationManager.NavigateTo("/library", forceLoad: false);
+        }
+    }
+}

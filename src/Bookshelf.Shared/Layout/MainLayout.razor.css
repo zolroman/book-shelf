@@ -1,20 +1,146 @@
+.app-shell {
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at 15% 10%, rgba(255, 219, 154, 0.25), transparent 36%),
+        radial-gradient(circle at 85% 0%, rgba(147, 216, 200, 0.22), transparent 30%),
+        linear-gradient(180deg, #f7f2e9 0%, #f2e8da 55%, #ece4d8 100%);
+}
+
+.top-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.4rem;
+    border-bottom: 1px solid rgba(20, 50, 62, 0.12);
+    background: rgba(244, 238, 227, 0.82);
+    backdrop-filter: blur(8px);
+}
+
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: #12313d;
+    text-decoration: none;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.brand-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 0.7rem;
+    background: linear-gradient(140deg, #12313d 0%, #207171 100%);
+    color: #fff6e4;
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.top-nav {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.top-nav a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0 0.95rem;
+    border-radius: 999px;
+    color: #244955;
+    text-decoration: none;
+    font-weight: 600;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.top-nav a:hover {
+    background: rgba(32, 113, 113, 0.1);
+}
+
+.top-nav a.active {
+    background: #207171;
+    color: #fef8eb;
+}
+
+.session-panel {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.session-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #33535f;
+}
+
+.session-input {
+    width: 5.5rem;
+    min-height: 2.75rem;
+    border: 1px solid #9db1b8;
+    border-radius: 0.6rem;
+    padding: 0.4rem 0.65rem;
+    background: #fffdf8;
+    color: #18353f;
+    font-size: 1rem;
+}
+
+.session-token-hint {
+    padding: 0.35rem 1.4rem 0.7rem;
+    color: #486169;
+    font-size: 0.82rem;
+}
+
+.session-token-hint code {
+    padding: 0.15rem 0.35rem;
+    border-radius: 0.3rem;
+    background: rgba(18, 49, 61, 0.08);
+}
+
+.page-content {
+    padding: 1rem 1.4rem 1.6rem;
+}
+
 #blazor-error-ui {
     color-scheme: light only;
-    background: lightyellow;
+    background: #8f1717;
     bottom: 0;
     box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
     box-sizing: border-box;
     display: none;
     left: 0;
-    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    padding: 0.7rem 1.25rem;
     position: fixed;
     width: 100%;
     z-index: 1000;
+    color: #fff4f4;
 }
 
-    #blazor-error-ui .dismiss {
-        cursor: pointer;
-        position: absolute;
-        right: 0.75rem;
-        top: 0.5rem;
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+@media (max-width: 960px) {
+    .top-bar {
+        padding: 1rem;
     }
+
+    .page-content {
+        padding: 0.85rem 1rem 1.3rem;
+    }
+
+    .session-token-hint {
+        padding: 0.35rem 1rem 0.6rem;
+    }
+}

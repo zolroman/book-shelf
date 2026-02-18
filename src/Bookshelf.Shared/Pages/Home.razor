@@ -1,7 +1,185 @@
-﻿@page "/"
+@page "/"
+@page "/search"
+@inject IBookshelfApiClient ApiClient
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Search</PageTitle>
 
-<h1>Hello, world!</h1>
+<section class="page-block">
+    <h1>Search Catalog</h1>
+    <p class="page-subtitle">
+        Find books in FantLab and inspect current catalog status before adding a media source.
+    </p>
 
-Welcome to your new app.
+    <form class="panel" @onsubmit="SubmitSearchAsync">
+        <div class="grid-2">
+            <label class="field">
+                <span>Title</span>
+                <input class="touch-target" @bind="_title" @bind:event="oninput" />
+            </label>
+            <label class="field">
+                <span>Author</span>
+                <input class="touch-target" @bind="_author" @bind:event="oninput" />
+            </label>
+        </div>
+
+        <div class="action-row">
+            <button class="btn touch-target" type="submit" disabled="@_isLoading">Search</button>
+            <span class="hint">At least one field is required.</span>
+        </div>
+    </form>
+</section>
+
+@if (_isLoading)
+{
+    <p class="state-text">Loading search results...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel state-panel state-error" role="alert">
+        <h2>Search failed</h2>
+        <p>@_error</p>
+        <button class="btn btn-secondary touch-target" type="button" @onclick="RetrySearchAsync">Retry</button>
+    </section>
+}
+else if (_hasSearched && _response is not null && _response.Items.Count == 0)
+{
+    <section class="panel state-panel">
+        <h2>No matches found</h2>
+        <p>Try a broader title or author query.</p>
+    </section>
+}
+else if (_response is not null)
+{
+    <section class="page-block">
+        <div class="panel">
+            <div class="list-head">
+                <h2>Results (@_response.Total)</h2>
+                <span>Page @_response.Page</span>
+            </div>
+
+            <ul class="result-list">
+                @foreach (var item in _response.Items)
+                {
+                    var badge = GetCatalogBadge(item);
+
+                    <li class="result-card">
+                        <div class="result-main">
+                            <a class="result-title" href="@($"/books/{item.ProviderCode}/{item.ProviderBookKey}")">
+                                @item.Title
+                            </a>
+                            <div class="result-meta">
+                                @string.Join(", ", item.Authors)
+                            </div>
+                            @if (item.Series is not null)
+                            {
+                                <div class="result-meta">
+                                    Series: @item.Series.Title (book @item.Series.Order)
+                                </div>
+                            }
+                        </div>
+
+                        <span class="@($"badge {badge.CssClass}")">@badge.Label</span>
+                    </li>
+                }
+            </ul>
+
+            <div class="pagination">
+                <button
+                    class="btn btn-secondary touch-target"
+                    type="button"
+                    disabled="@(_response.Page <= 1)"
+                    @onclick="PreviousPageAsync">
+                    Previous
+                </button>
+                <button
+                    class="btn btn-secondary touch-target"
+                    type="button"
+                    disabled="@((_response.Page * _response.PageSize) >= _response.Total)"
+                    @onclick="NextPageAsync">
+                    Next
+                </button>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    private const int DefaultPageSize = 20;
+
+    private string? _title;
+    private string? _author;
+    private SearchBooksResponse? _response;
+    private bool _isLoading;
+    private bool _hasSearched;
+    private string? _error;
+    private int _page = 1;
+
+    private async Task SubmitSearchAsync()
+    {
+        await SearchAsync(1);
+    }
+
+    private async Task RetrySearchAsync()
+    {
+        await SearchAsync(_page);
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        await SearchAsync(Math.Max(1, _page - 1));
+    }
+
+    private async Task NextPageAsync()
+    {
+        await SearchAsync(_page + 1);
+    }
+
+    private async Task SearchAsync(int page)
+    {
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(_title) && string.IsNullOrWhiteSpace(_author))
+        {
+            _response = null;
+            _hasSearched = true;
+            _error = "Provide title or author.";
+            return;
+        }
+
+        _isLoading = true;
+        _hasSearched = true;
+        _page = page;
+
+        try
+        {
+            _response = await ApiClient.SearchBooksAsync(
+                _title?.Trim(),
+                _author?.Trim(),
+                page,
+                DefaultPageSize);
+        }
+        catch (ApiClientException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static (string Label, string CssClass) GetCatalogBadge(SearchBookItemDto item)
+    {
+        if (item.CatalogState.Equals("library", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("In Library", "badge-library");
+        }
+
+        if (item.CatalogState.Equals("archive", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("In Archive", "badge-archive");
+        }
+
+        return ("Not Added", "badge-not-added");
+    }
+}

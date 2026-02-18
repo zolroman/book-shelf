@@ -116,7 +116,10 @@ public sealed class BookRepository : IBookRepository
         string? providerCode,
         CatalogState? catalogState)
     {
-        var booksQuery = _dbContext.Books.AsQueryable();
+        var booksQuery = _dbContext.Books
+            .AsNoTracking()
+            .Include(x => x.MediaAssets)
+            .AsQueryable();
 
         if (!includeArchived)
         {
