@@ -13,12 +13,15 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 1 Baseline
+## Phase 2 Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
 - EF Core persistence with PostgreSQL mappings and initial migration
 - Repository interfaces and EF repository adapters (`Book`, `Shelf`, `DownloadJob`)
+- `/api/v1` contract endpoints scaffolded with request validation
+- Unified API error envelope (`code`, `message`, `details`, `correlationId`)
+- Correlation ID propagation via `X-Correlation-Id`
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 

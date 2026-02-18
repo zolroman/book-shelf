@@ -1,4 +1,4 @@
-# BookShelf Phase 1 Runbook
+# BookShelf Phase 2 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x

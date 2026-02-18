@@ -7,3 +7,8 @@ Accept: application/json
 
 GET {{Bookshelf.Api_HostAddress}}/api/v1/system/ping
 Accept: application/json
+
+###
+
+GET {{Bookshelf.Api_HostAddress}}/api/v1/search/books?title=Dune&page=1&pageSize=20
+Accept: application/json
