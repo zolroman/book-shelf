@@ -37,6 +37,7 @@ public sealed class DownloadJobRepository : IDownloadJobRepository
 
     public async Task<IReadOnlyList<DownloadJob>> ListByUserAsync(
         long userId,
+        DownloadJobStatus? status,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default)
@@ -44,11 +45,45 @@ public sealed class DownloadJobRepository : IDownloadJobRepository
         var safePage = page < 1 ? 1 : page;
         var safePageSize = pageSize < 1 ? 20 : pageSize;
 
-        return await _dbContext.DownloadJobs
-            .Where(x => x.UserId == userId)
+        var query = _dbContext.DownloadJobs.Where(x => x.UserId == userId);
+        if (status.HasValue)
+        {
+            var statusValue = status.Value;
+            query = query.Where(x => x.Status == statusValue);
+        }
+
+        return await query
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> CountByUserAsync(
+        long userId,
+        DownloadJobStatus? status,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.DownloadJobs.Where(x => x.UserId == userId);
+        if (status.HasValue)
+        {
+            var statusValue = status.Value;
+            query = query.Where(x => x.Status == statusValue);
+        }
+
+        return await query.CountAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DownloadJob>> ListActiveAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var safeLimit = limit <= 0 ? 100 : limit;
+
+        return await _dbContext.DownloadJobs
+            .Where(x => x.Status == DownloadJobStatus.Queued || x.Status == DownloadJobStatus.Downloading)
+            .OrderBy(x => x.UpdatedAtUtc)
+            .Take(safeLimit)
             .ToListAsync(cancellationToken);
     }
 

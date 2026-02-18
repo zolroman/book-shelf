@@ -236,46 +236,129 @@ public static class V1Endpoints
         }
     }
 
-    private static IResult ListDownloadJobs(
+    private static async Task<IResult> ListDownloadJobs(
         long? userId,
         string? status,
         int? page,
         int? pageSize,
-        InMemoryApiStore store)
+        IDownloadJobService downloadJobService,
+        CancellationToken cancellationToken)
     {
         var normalizedUserId = EnsureUserId(userId);
-        var response = store.ListJobs(normalizedUserId, status, page ?? 1, pageSize ?? 20);
-        return Results.Ok(response);
-    }
+        var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
+        var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
 
-    private static IResult GetDownloadJob(long jobId, long? userId, InMemoryApiStore store)
-    {
-        var normalizedUserId = EnsureUserId(userId);
-        var job = store.GetJob(jobId, normalizedUserId);
-        if (job is null)
+        try
+        {
+            var response = await downloadJobService.ListAsync(
+                normalizedUserId,
+                status,
+                safePage,
+                safePageSize,
+                cancellationToken);
+            return Results.Ok(response);
+        }
+        catch (ArgumentException)
         {
             throw new ApiException(
-                ApiErrorCodes.DownloadNotFound,
-                "Download job was not found.",
-                HttpStatusCode.NotFound);
+                ApiErrorCodes.InvalidArgument,
+                "status filter is invalid.",
+                HttpStatusCode.BadRequest);
         }
-
-        return Results.Ok(job);
+        catch (DownloadExecutionUnavailableException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.QBittorrentStatusFailed,
+                "Failed to synchronize download job status from qBittorrent.",
+                HttpStatusCode.BadGateway);
+        }
+        catch (DownloadExecutionFailedException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.QBittorrentStatusFailed,
+                "Failed to synchronize download job status from qBittorrent.",
+                HttpStatusCode.BadGateway);
+        }
     }
 
-    private static IResult CancelDownloadJob(long jobId, CancelDownloadJobRequest request, InMemoryApiStore store)
+    private static async Task<IResult> GetDownloadJob(
+        long jobId,
+        long? userId,
+        IDownloadJobService downloadJobService,
+        CancellationToken cancellationToken)
+    {
+        var normalizedUserId = EnsureUserId(userId);
+
+        try
+        {
+            var job = await downloadJobService.GetAsync(jobId, normalizedUserId, cancellationToken);
+            if (job is null)
+            {
+                throw new ApiException(
+                    ApiErrorCodes.DownloadNotFound,
+                    "Download job was not found.",
+                    HttpStatusCode.NotFound);
+            }
+
+            return Results.Ok(job);
+        }
+        catch (DownloadExecutionUnavailableException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.QBittorrentStatusFailed,
+                "Failed to synchronize download job status from qBittorrent.",
+                HttpStatusCode.BadGateway);
+        }
+        catch (DownloadExecutionFailedException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.QBittorrentStatusFailed,
+                "Failed to synchronize download job status from qBittorrent.",
+                HttpStatusCode.BadGateway);
+        }
+    }
+
+    private static async Task<IResult> CancelDownloadJob(
+        long jobId,
+        CancelDownloadJobRequest request,
+        IDownloadJobService downloadJobService,
+        CancellationToken cancellationToken)
     {
         EnsureUserId(request.UserId);
-        var job = store.CancelJob(jobId, request.UserId);
-        if (job is null)
+
+        try
+        {
+            var job = await downloadJobService.CancelAsync(jobId, request.UserId, cancellationToken);
+            return Results.Ok(job);
+        }
+        catch (DownloadJobNotFoundException)
         {
             throw new ApiException(
                 ApiErrorCodes.DownloadNotFound,
                 "Download job was not found.",
                 HttpStatusCode.NotFound);
         }
-
-        return Results.Ok(job);
+        catch (DownloadJobCancelNotAllowedException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "Cancel is allowed only for queued or downloading jobs.",
+                HttpStatusCode.BadRequest);
+        }
+        catch (DownloadExecutionUnavailableException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.DownloadCancelFailed,
+                "qBittorrent cancel operation failed.",
+                HttpStatusCode.BadGateway);
+        }
+        catch (DownloadExecutionFailedException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.DownloadCancelFailed,
+                "qBittorrent cancel operation failed.",
+                HttpStatusCode.BadGateway);
+        }
     }
 
     private static IResult GetShelves(long? userId, InMemoryApiStore store)

@@ -13,7 +13,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 5 Baseline
+## Phase 6 Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
@@ -33,6 +33,10 @@ Requirements are defined in `requirements/` and are the source of truth.
 - Add flow idempotency returns existing active job for `(userId, bookId, mediaType)`
 - qBittorrent enqueue adapter added with timeout/retry and error mapping (`QBITTORRENT_UNAVAILABLE`, `QBITTORRENT_ENQUEUE_FAILED`)
 - Candidate resolution by `candidateId` is integrated into add flow
+- qBittorrent adapter now supports status polling and cancel operations
+- Download jobs APIs (`list/get/cancel`) are DB-backed and synchronized with qBittorrent state
+- Background sync worker polls active jobs every 15s with 60s `not found` grace handling
+- Completion sync marks media as available and recomputes `Archive`/`Library` state
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 

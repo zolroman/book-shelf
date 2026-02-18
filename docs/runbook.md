@@ -1,4 +1,4 @@
-# BookShelf Phase 5 Runbook
+# BookShelf Phase 6 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
@@ -79,6 +79,11 @@ Environment keys supported by the server:
 - `QBITTORRENT_MAX_RETRIES` (default `2`)
 - `QBITTORRENT_RETRY_DELAY_MS` (default `300`)
 - `QBITTORRENT_NOT_FOUND_GRACE_SECONDS` (default `60`)
+
+## Download Sync Worker
+- Background worker polls active download jobs every `15` seconds.
+- qBittorrent `not found` is handled with grace period from `QBITTORRENT_NOT_FOUND_GRACE_SECONDS` (v1 default `60`).
+- On completed sync state, media is marked available and book catalog state is recomputed.
 
 ## Run API
 ```powershell

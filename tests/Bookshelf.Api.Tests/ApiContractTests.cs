@@ -238,6 +238,54 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("QBITTORRENT_UNAVAILABLE", payload!.Code);
     }
 
+    [Fact]
+    public async Task CancelDownloadJob_WhenCancelFails_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IDownloadJobService>();
+                services.AddScoped<IDownloadJobService>(_ => new ThrowingDownloadJobService(
+                    new DownloadExecutionFailedException("qbittorrent", "cancel failed")));
+            });
+        });
+
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/download-jobs/5/cancel",
+            new CancelDownloadJobRequest(1));
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("DOWNLOAD_CANCEL_FAILED", payload!.Code);
+    }
+
+    [Fact]
+    public async Task ListDownloadJobs_InvalidStatus_ReturnsInvalidArgument()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IDownloadJobService>();
+                services.AddScoped<IDownloadJobService>(_ => new ThrowingDownloadJobService(
+                    new ArgumentException("invalid status")));
+            });
+        });
+
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/download-jobs?userId=1&status=wrong");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("INVALID_ARGUMENT", payload!.Code);
+    }
+
     private sealed class StubCandidateDiscoveryService : ICandidateDiscoveryService
     {
         public Task<DownloadCandidatesResponse> FindAsync(
@@ -336,6 +384,47 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         public Task<AddAndDownloadResponse> ExecuteAsync(
             AddAndDownloadRequest request,
             CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+    }
+
+    private sealed class ThrowingDownloadJobService : IDownloadJobService
+    {
+        private readonly Exception _exception;
+
+        public ThrowingDownloadJobService(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public Task<DownloadJobsResponse> ListAsync(
+            long userId,
+            string? status,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
+        public Task<DownloadJobDto?> GetAsync(
+            long jobId,
+            long userId,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
+        public Task<DownloadJobDto> CancelAsync(
+            long jobId,
+            long userId,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
+        public Task SyncActiveAsync(CancellationToken cancellationToken = default)
         {
             throw _exception;
         }

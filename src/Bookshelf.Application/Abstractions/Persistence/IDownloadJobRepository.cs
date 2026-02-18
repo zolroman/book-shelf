@@ -15,8 +15,18 @@ public interface IDownloadJobRepository
 
     Task<IReadOnlyList<DownloadJob>> ListByUserAsync(
         long userId,
+        DownloadJobStatus? status,
         int page,
         int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountByUserAsync(
+        long userId,
+        DownloadJobStatus? status,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DownloadJob>> ListActiveAsync(
+        int limit,
         CancellationToken cancellationToken = default);
 
     Task AddAsync(DownloadJob job, CancellationToken cancellationToken = default);

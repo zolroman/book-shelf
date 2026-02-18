@@ -11,6 +11,7 @@ public static class DependencyInjection
         services.AddScoped<IBookSearchService, BookSearchService>();
         services.AddScoped<ICandidateDiscoveryService, CandidateDiscoveryService>();
         services.AddScoped<IAddAndDownloadService, AddAndDownloadService>();
+        services.AddScoped<IDownloadJobService, DownloadJobService>();
         return services;
     }
 }

@@ -382,13 +382,46 @@ public class AddAndDownloadServiceTests
 
         public Task<IReadOnlyList<DownloadJob>> ListByUserAsync(
             long userId,
+            DownloadJobStatus? status,
             int page,
             int pageSize,
             CancellationToken cancellationToken = default)
         {
-            IReadOnlyList<DownloadJob> items = Jobs
-                .Where(x => x.UserId == userId)
+            var query = Jobs.Where(x => x.UserId == userId);
+            if (status.HasValue)
+            {
+                var statusValue = status.Value;
+                query = query.Where(x => x.Status == statusValue);
+            }
+
+            IReadOnlyList<DownloadJob> items = query
                 .OrderByDescending(x => x.CreatedAtUtc)
+                .ToArray();
+            return Task.FromResult(items);
+        }
+
+        public Task<int> CountByUserAsync(
+            long userId,
+            DownloadJobStatus? status,
+            CancellationToken cancellationToken = default)
+        {
+            var query = Jobs.Where(x => x.UserId == userId);
+            if (status.HasValue)
+            {
+                var statusValue = status.Value;
+                query = query.Where(x => x.Status == statusValue);
+            }
+
+            return Task.FromResult(query.Count());
+        }
+
+        public Task<IReadOnlyList<DownloadJob>> ListActiveAsync(
+            int limit,
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<DownloadJob> items = Jobs
+                .Where(x => x.Status is DownloadJobStatus.Queued or DownloadJobStatus.Downloading)
+                .Take(limit)
                 .ToArray();
             return Task.FromResult(items);
         }
@@ -424,6 +457,8 @@ public class AddAndDownloadServiceTests
 
         public int EnqueueCalls { get; private set; }
 
+        public TimeSpan NotFoundGracePeriod => TimeSpan.FromMinutes(1);
+
         public Task<DownloadEnqueueResult> EnqueueAsync(
             string downloadUri,
             CancellationToken cancellationToken = default)
@@ -435,6 +470,25 @@ public class AddAndDownloadServiceTests
             }
 
             return Task.FromResult(new DownloadEnqueueResult("abc123hash"));
+        }
+
+        public Task<DownloadStatusResult> GetStatusAsync(
+            string externalJobId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new DownloadStatusResult(
+                    ExternalDownloadState.Downloading,
+                    StoragePath: null,
+                    SizeBytes: null));
+        }
+
+        public Task CancelAsync(
+            string externalJobId,
+            bool deleteFiles,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 }

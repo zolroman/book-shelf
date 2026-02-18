@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Exceptions;
 using Bookshelf.Infrastructure.Integrations.QBittorrent;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -57,6 +58,65 @@ public class QBittorrentDownloadClientTests
 
         await Assert.ThrowsAsync<DownloadExecutionFailedException>(
             async () => await client.EnqueueAsync("magnet:?xt=urn:btih:abc123"));
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_MapsCompletedStateAndMetadata()
+    {
+        var handler = new SequenceHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    [
+                      {
+                        "state": "uploading",
+                        "content_path": "D:\\media\\dune.m4b",
+                        "total_size": 734003200
+                      }
+                    ]
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            });
+
+        var client = CreateClient(handler);
+
+        var result = await client.GetStatusAsync("hash123");
+
+        Assert.Equal(ExternalDownloadState.Completed, result.State);
+        Assert.Equal("D:\\media\\dune.m4b", result.StoragePath);
+        Assert.Equal(734003200, result.SizeBytes);
+        Assert.Equal("/api/v2/torrents/info", Assert.Single(handler.RequestPaths));
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_EmptyListReturnsNotFound()
+    {
+        var handler = new SequenceHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", Encoding.UTF8, "application/json")
+            });
+
+        var client = CreateClient(handler);
+
+        var result = await client.GetStatusAsync("hash456");
+
+        Assert.Equal(ExternalDownloadState.NotFound, result.State);
+    }
+
+    [Fact]
+    public async Task CancelAsync_PostsDeleteRequest()
+    {
+        var handler = new SequenceHttpHandler(new HttpResponseMessage(HttpStatusCode.OK));
+        var client = CreateClient(handler);
+
+        await client.CancelAsync("hash789", deleteFiles: false);
+
+        Assert.Equal("/api/v2/torrents/delete", Assert.Single(handler.RequestPaths));
+        Assert.Contains("hashes=hash789", Assert.Single(handler.RequestBodies));
+        Assert.Contains("deleteFiles=false", Assert.Single(handler.RequestBodies));
     }
 
     private static QBittorrentDownloadClient CreateClient(

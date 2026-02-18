@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text.Json;
 using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Exceptions;
 using Microsoft.Extensions.Logging;
@@ -24,6 +25,8 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
         _options = options.Value;
     }
 
+    public TimeSpan NotFoundGracePeriod => TimeSpan.FromSeconds(Math.Max(1, _options.NotFoundGraceSeconds));
+
     public async Task<DownloadEnqueueResult> EnqueueAsync(
         string downloadUri,
         CancellationToken cancellationToken = default)
@@ -33,6 +36,97 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             throw new DownloadExecutionFailedException(ProviderCode, "downloadUri is required.");
         }
 
+        using var response = await SendWithRetryAsync(
+            operation: "enqueue",
+            requestFactory: () =>
+            {
+                return new HttpRequestMessage(HttpMethod.Post, "/api/v2/torrents/add")
+                {
+                    Content = new FormUrlEncodedContent(
+                    [
+                        new KeyValuePair<string, string>("urls", downloadUri.Trim()),
+                    ]),
+                };
+            },
+            cancellationToken);
+
+        return new DownloadEnqueueResult(TryExtractBtih(downloadUri));
+    }
+
+    public async Task<DownloadStatusResult> GetStatusAsync(
+        string externalJobId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(externalJobId))
+        {
+            return new DownloadStatusResult(ExternalDownloadState.NotFound, null, null);
+        }
+
+        using var response = await SendWithRetryAsync(
+            operation: "status",
+            requestFactory: () =>
+            {
+                var encodedHash = Uri.EscapeDataString(externalJobId.Trim());
+                return new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"/api/v2/torrents/info?hashes={encodedHash}");
+            },
+            cancellationToken);
+
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return new DownloadStatusResult(ExternalDownloadState.NotFound, null, null);
+        }
+
+        using var document = JsonDocument.Parse(payload);
+        if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.GetArrayLength() == 0)
+        {
+            return new DownloadStatusResult(ExternalDownloadState.NotFound, null, null);
+        }
+
+        var item = document.RootElement[0];
+        var stateRaw = TryGetString(item, "state");
+        var storagePath = TryGetString(item, "content_path") ?? TryGetString(item, "save_path");
+        var sizeBytes = TryGetInt64(item, "size") ?? TryGetInt64(item, "total_size");
+
+        return new DownloadStatusResult(
+            State: MapState(stateRaw),
+            StoragePath: storagePath,
+            SizeBytes: sizeBytes);
+    }
+
+    public async Task CancelAsync(
+        string externalJobId,
+        bool deleteFiles,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(externalJobId))
+        {
+            throw new DownloadExecutionFailedException(ProviderCode, "externalJobId is required for cancellation.");
+        }
+
+        using var response = await SendWithRetryAsync(
+            operation: "cancel",
+            requestFactory: () =>
+            {
+                return new HttpRequestMessage(HttpMethod.Post, "/api/v2/torrents/delete")
+                {
+                    Content = new FormUrlEncodedContent(
+                    [
+                        new KeyValuePair<string, string>("hashes", externalJobId.Trim()),
+                        new KeyValuePair<string, string>("deleteFiles", deleteFiles ? "true" : "false"),
+                    ]),
+                };
+            },
+            cancellationToken);
+    }
+
+    private async Task<HttpResponseMessage> SendWithRetryAsync(
+        string operation,
+        Func<HttpRequestMessage> requestFactory,
+        CancellationToken cancellationToken)
+    {
         Exception? lastException = null;
         var attempts = Math.Max(0, _options.MaxRetries) + 1;
         for (var attempt = 1; attempt <= attempts; attempt++)
@@ -40,33 +134,30 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             var startedAt = Stopwatch.GetTimestamp();
             try
             {
-                using var response = await _httpClient.PostAsync(
-                    "/api/v2/torrents/add",
-                    new FormUrlEncodedContent(
-                    [
-                        new KeyValuePair<string, string>("urls", downloadUri.Trim()),
-                    ]),
-                    cancellationToken);
-
+                var request = requestFactory();
+                var response = await _httpClient.SendAsync(request, cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
                     if (IsTransientStatusCode(response.StatusCode))
                     {
+                        response.Dispose();
                         throw new HttpRequestException(
                             $"qBittorrent transient status code {(int)response.StatusCode}.");
                     }
 
+                    response.Dispose();
                     throw new DownloadExecutionFailedException(
                         ProviderCode,
-                        $"qBittorrent returned non-success status code {(int)response.StatusCode}.");
+                        $"qBittorrent {operation} returned non-success status code {(int)response.StatusCode}.");
                 }
 
                 _logger.LogInformation(
-                    "qBittorrent enqueue completed. Attempt={Attempt} DurationMs={DurationMs}",
+                    "qBittorrent {Operation} completed. Attempt={Attempt} DurationMs={DurationMs}",
+                    operation,
                     attempt,
                     Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
 
-                return new DownloadEnqueueResult(TryExtractBtih(downloadUri));
+                return response;
             }
             catch (DownloadExecutionFailedException)
             {
@@ -77,7 +168,8 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
                 lastException = exception;
                 _logger.LogWarning(
                     exception,
-                    "qBittorrent enqueue transient failure. Attempt={Attempt}/{Attempts}",
+                    "qBittorrent {Operation} transient failure. Attempt={Attempt}/{Attempts}",
+                    operation,
                     attempt,
                     attempts);
 
@@ -94,14 +186,14 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             {
                 throw new DownloadExecutionFailedException(
                     ProviderCode,
-                    "qBittorrent enqueue failed.",
+                    $"qBittorrent {operation} failed.",
                     exception);
             }
         }
 
         throw new DownloadExecutionUnavailableException(
             ProviderCode,
-            "qBittorrent is unavailable after retry attempts.",
+            $"qBittorrent {operation} is unavailable after retry attempts.",
             lastException);
     }
 
@@ -131,6 +223,58 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
         }
 
         return hash.Trim().ToLowerInvariant();
+    }
+
+    private static ExternalDownloadState MapState(string? stateRaw)
+    {
+        if (string.IsNullOrWhiteSpace(stateRaw))
+        {
+            return ExternalDownloadState.Downloading;
+        }
+
+        var state = stateRaw.Trim().ToLowerInvariant();
+
+        if (state.Contains("error", StringComparison.Ordinal) || state == "missingfiles")
+        {
+            return ExternalDownloadState.Failed;
+        }
+
+        if (state is "queueddl" or "metadl" or "pauseddl" or "checkingdl")
+        {
+            return ExternalDownloadState.Queued;
+        }
+
+        if (state is "downloading" or "stalleddl" or "forceddl" or "moving" or "allocating")
+        {
+            return ExternalDownloadState.Downloading;
+        }
+
+        if (state is "uploading" or "stalledup" or "forcedup" or "pausedup" or "queuedup" or "checkingup")
+        {
+            return ExternalDownloadState.Completed;
+        }
+
+        return ExternalDownloadState.Downloading;
+    }
+
+    private static string? TryGetString(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value) || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.GetString();
+    }
+
+    private static long? TryGetInt64(JsonElement item, string name)
+    {
+        if (!item.TryGetProperty(name, out var value) || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.TryGetInt64(out var parsed) ? parsed : null;
     }
 
     private static bool IsTransient(Exception exception)
