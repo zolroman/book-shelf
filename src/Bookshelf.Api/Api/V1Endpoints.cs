@@ -361,18 +361,25 @@ public static class V1Endpoints
         }
     }
 
-    private static IResult GetShelves(long? userId, InMemoryApiStore store)
+    private static async Task<IResult> GetShelves(
+        long? userId,
+        IShelfService shelfService,
+        CancellationToken cancellationToken)
     {
         var normalizedUserId = EnsureUserId(userId);
-        return Results.Ok(store.ListShelves(normalizedUserId));
+        var response = await shelfService.ListAsync(normalizedUserId, cancellationToken);
+        return Results.Ok(response);
     }
 
-    private static IResult CreateShelf(CreateShelfRequest request, InMemoryApiStore store)
+    private static async Task<IResult> CreateShelf(
+        CreateShelfRequest request,
+        IShelfService shelfService,
+        CancellationToken cancellationToken)
     {
         var userId = EnsureUserId(request.UserId);
         EnsureRequired(request.Name, nameof(request.Name));
 
-        var shelf = store.CreateShelf(userId, request.Name.Trim());
+        var shelf = await shelfService.CreateAsync(userId, request.Name.Trim(), cancellationToken);
         if (shelf is null)
         {
             throw new ApiException(
@@ -384,7 +391,11 @@ public static class V1Endpoints
         return Results.Created($"/api/v1/shelves/{shelf.Id}", new CreateShelfResponse(shelf));
     }
 
-    private static IResult AddBookToShelf(long shelfId, AddBookToShelfRequest request, InMemoryApiStore store)
+    private static async Task<IResult> AddBookToShelf(
+        long shelfId,
+        AddBookToShelfRequest request,
+        IShelfService shelfService,
+        CancellationToken cancellationToken)
     {
         var userId = EnsureUserId(request.UserId);
         if (request.BookId <= 0)
@@ -395,8 +406,13 @@ public static class V1Endpoints
                 HttpStatusCode.BadRequest);
         }
 
-        var result = store.AddBookToShelf(shelfId, userId, request.BookId);
-        if (result.IsNotFound)
+        var result = await shelfService.AddBookAsync(
+            shelfId,
+            userId,
+            request.BookId,
+            cancellationToken);
+
+        if (result.Status == ShelfAddBookResultStatus.NotFound)
         {
             throw new ApiException(
                 ApiErrorCodes.ShelfNotFound,
@@ -404,7 +420,7 @@ public static class V1Endpoints
                 HttpStatusCode.NotFound);
         }
 
-        if (result.IsAlreadyExists)
+        if (result.Status == ShelfAddBookResultStatus.AlreadyExists)
         {
             throw new ApiException(
                 ApiErrorCodes.ShelfBookExists,
@@ -415,7 +431,12 @@ public static class V1Endpoints
         return Results.Ok(new AddBookToShelfResponse(result.Shelf!));
     }
 
-    private static IResult RemoveBookFromShelf(long shelfId, long bookId, long? userId, InMemoryApiStore store)
+    private static async Task<IResult> RemoveBookFromShelf(
+        long shelfId,
+        long bookId,
+        long? userId,
+        IShelfService shelfService,
+        CancellationToken cancellationToken)
     {
         var normalizedUserId = EnsureUserId(userId);
         if (bookId <= 0)
@@ -426,7 +447,11 @@ public static class V1Endpoints
                 HttpStatusCode.BadRequest);
         }
 
-        var removed = store.RemoveBookFromShelf(shelfId, normalizedUserId, bookId);
+        var removed = await shelfService.RemoveBookAsync(
+            shelfId,
+            normalizedUserId,
+            bookId,
+            cancellationToken);
         if (!removed)
         {
             throw new ApiException(

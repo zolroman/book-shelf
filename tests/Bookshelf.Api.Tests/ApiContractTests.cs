@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Collections.Concurrent;
 using Bookshelf.Application.Abstractions.Services;
 using Bookshelf.Application.Exceptions;
 using Bookshelf.Api.Api.Middleware;
@@ -53,7 +54,17 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task CreateShelf_DuplicateName_ReturnsConflict()
     {
-        using var client = _factory.CreateClient();
+        var shelfService = new InMemoryShelfService();
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IShelfService>();
+                services.AddSingleton<IShelfService>(shelfService);
+            });
+        });
+
+        using var client = factory.CreateClient();
         var userId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var request = new CreateShelfRequest(userId, "Sci-Fi");
 
@@ -70,7 +81,17 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task AddBookToShelf_DuplicateBook_ReturnsConflict()
     {
-        using var client = _factory.CreateClient();
+        var shelfService = new InMemoryShelfService();
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IShelfService>();
+                services.AddSingleton<IShelfService>(shelfService);
+            });
+        });
+
+        using var client = factory.CreateClient();
         var userId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var createResponse = await client.PostAsJsonAsync(
             "/api/v1/shelves",
@@ -427,6 +448,79 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         public Task SyncActiveAsync(CancellationToken cancellationToken = default)
         {
             throw _exception;
+        }
+    }
+
+    private sealed class InMemoryShelfService : IShelfService
+    {
+        private readonly ConcurrentDictionary<long, ShelfDto> _shelves = new();
+        private long _nextShelfId = 100;
+
+        public Task<ShelvesResponse> ListAsync(long userId, CancellationToken cancellationToken = default)
+        {
+            var items = _shelves.Values
+                .Where(x => x.UserId == userId)
+                .OrderBy(x => x.Name)
+                .ToArray();
+            return Task.FromResult(new ShelvesResponse(items));
+        }
+
+        public Task<ShelfDto?> CreateAsync(long userId, string name, CancellationToken cancellationToken = default)
+        {
+            var normalized = name.Trim();
+            if (_shelves.Values.Any(x =>
+                    x.UserId == userId &&
+                    x.Name.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Task.FromResult<ShelfDto?>(null);
+            }
+
+            var created = new ShelfDto(
+                Id: Interlocked.Increment(ref _nextShelfId),
+                UserId: userId,
+                Name: normalized,
+                CreatedAtUtc: DateTimeOffset.UtcNow,
+                BookIds: Array.Empty<long>());
+
+            _shelves[created.Id] = created;
+            return Task.FromResult<ShelfDto?>(created);
+        }
+
+        public Task<ShelfAddBookResult> AddBookAsync(
+            long shelfId,
+            long userId,
+            long bookId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_shelves.TryGetValue(shelfId, out var shelf) || shelf.UserId != userId)
+            {
+                return Task.FromResult(new ShelfAddBookResult(ShelfAddBookResultStatus.NotFound, null));
+            }
+
+            if (shelf.BookIds.Contains(bookId))
+            {
+                return Task.FromResult(new ShelfAddBookResult(ShelfAddBookResultStatus.AlreadyExists, null));
+            }
+
+            var updated = shelf with { BookIds = shelf.BookIds.Concat(new[] { bookId }).OrderBy(x => x).ToArray() };
+            _shelves[shelfId] = updated;
+            return Task.FromResult(new ShelfAddBookResult(ShelfAddBookResultStatus.Success, updated));
+        }
+
+        public Task<bool> RemoveBookAsync(
+            long shelfId,
+            long userId,
+            long bookId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_shelves.TryGetValue(shelfId, out var shelf) || shelf.UserId != userId)
+            {
+                return Task.FromResult(false);
+            }
+
+            var updated = shelf with { BookIds = shelf.BookIds.Where(x => x != bookId).ToArray() };
+            _shelves[shelfId] = updated;
+            return Task.FromResult(true);
         }
     }
 }

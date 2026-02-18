@@ -13,7 +13,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 6 Baseline
+## Phase 7 Shelves Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
@@ -37,6 +37,8 @@ Requirements are defined in `requirements/` and are the source of truth.
 - Download jobs APIs (`list/get/cancel`) are DB-backed and synchronized with qBittorrent state
 - Background sync worker polls active jobs every 15s with 60s `not found` grace handling
 - Completion sync marks media as available and recomputes `Archive`/`Library` state
+- Shelf endpoints (`GET/POST /api/v1/shelves`, `POST/DELETE /api/v1/shelves/{id}/books`) are now DB-backed
+- Shelf uniqueness and duplicate-book constraints are enforced by service + API contract mapping
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 

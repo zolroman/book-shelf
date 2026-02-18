@@ -13,7 +13,6 @@ builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
 builder.Services.AddBookshelfApplication();
 builder.Services.AddBookshelfInfrastructure(builder.Configuration);
-builder.Services.AddSingleton<InMemoryApiStore>();
 builder.Services.AddHostedService<DownloadJobSyncWorker>();
 
 var app = builder.Build();

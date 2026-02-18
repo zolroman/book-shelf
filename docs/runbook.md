@@ -1,4 +1,4 @@
-# BookShelf Phase 6 Runbook
+# BookShelf Phase 7 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
