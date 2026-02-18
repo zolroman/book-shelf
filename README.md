@@ -13,7 +13,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 8 UI Baseline
+## Phase 9 Offline Sync Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
@@ -50,6 +50,20 @@ Requirements are defined in `requirements/` and are the source of truth.
 - Shelves page implemented (`/shelves`) with create/add/remove shelf-book operations
 - Library API response now includes media availability flags (`hasTextMedia`, `hasAudioMedia`) for UI actions
 - Web and MAUI hosts now support configurable API base URL
+- Added progress/history contracts and endpoints:
+  - `PUT /api/v1/progress`, `GET /api/v1/progress`
+  - `POST /api/v1/history/events`, `GET /api/v1/history/events`
+- Progress conflict resolution implemented: latest `updatedAtUtc` wins, tie -> higher `progressPercent`
+- History append dedupe implemented by deterministic key
+- MAUI offline store added with local SQLite cache and sync queue
+- MAUI offline sync service added:
+  - startup/reconnect/periodic (30s)/manual sync triggers
+  - sync order: push queued writes -> pull progress/history -> pull jobs/catalog -> reconcile media index
+- MAUI offline behavior:
+  - read/listen pages (`/reader/{bookId}`, `/player/{bookId}`)
+  - local progress/history writes queue while offline
+  - add/download action disabled offline (`NETWORK_REQUIRED`)
+- Web host remains online-only with no-op offline services
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 

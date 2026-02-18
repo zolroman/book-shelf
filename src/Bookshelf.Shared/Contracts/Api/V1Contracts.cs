@@ -83,6 +83,56 @@ public sealed record LibraryResponse(
     bool IncludeArchived,
     IReadOnlyList<LibraryBookDto> Items);
 
+public sealed record UpsertProgressRequest(
+    long BookId,
+    string MediaType,
+    string PositionRef,
+    decimal ProgressPercent,
+    DateTimeOffset? UpdatedAtUtc);
+
+public sealed record ProgressSnapshotDto(
+    long UserId,
+    long BookId,
+    string MediaType,
+    string PositionRef,
+    decimal ProgressPercent,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record ProgressSnapshotsResponse(
+    int Page,
+    int PageSize,
+    int Total,
+    IReadOnlyList<ProgressSnapshotDto> Items);
+
+public sealed record HistoryEventWriteDto(
+    long BookId,
+    string MediaType,
+    string EventType,
+    string? PositionRef,
+    DateTimeOffset EventAtUtc);
+
+public sealed record AppendHistoryEventsRequest(
+    IReadOnlyList<HistoryEventWriteDto> Items);
+
+public sealed record AppendHistoryEventsResponse(
+    int Added,
+    int Deduplicated);
+
+public sealed record HistoryEventDto(
+    long Id,
+    long UserId,
+    long BookId,
+    string MediaType,
+    string EventType,
+    string? PositionRef,
+    DateTimeOffset EventAtUtc);
+
+public sealed record HistoryEventsResponse(
+    int Page,
+    int PageSize,
+    int Total,
+    IReadOnlyList<HistoryEventDto> Items);
+
 public sealed record AddAndDownloadRequest(
     long UserId,
     string ProviderCode,

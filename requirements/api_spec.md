@@ -180,6 +180,83 @@ Request:
 ## 5.11 Remove Book from Shelf
 `DELETE /api/v1/shelves/{shelfId}/books/{bookId}`
 
+## 5.12 Upsert Progress Snapshot
+`PUT /api/v1/progress`
+
+Request:
+```json
+{
+  "bookId": 42,
+  "mediaType": "text",
+  "positionRef": "chapter:1/page:12",
+  "progressPercent": 12.5,
+  "updatedAtUtc": "2026-02-18T12:30:00Z"
+}
+```
+
+Rules:
+- Requires bearer auth in v1 (`userId` from token claims).
+- Conflict resolution:
+  - newer `updatedAtUtc` wins;
+  - when timestamps equal, higher `progressPercent` wins.
+
+Response `200`:
+```json
+{
+  "userId": 7,
+  "bookId": 42,
+  "mediaType": "text",
+  "positionRef": "chapter:1/page:12",
+  "progressPercent": 12.5,
+  "updatedAtUtc": "2026-02-18T12:30:00Z"
+}
+```
+
+## 5.13 List Progress Snapshots
+`GET /api/v1/progress?bookId={bookId?}&mediaType={text|audio?}&page={page}&pageSize={pageSize}`
+
+Rules:
+- Requires bearer auth in v1.
+- Returns user snapshots sorted by `updatedAtUtc DESC`.
+
+## 5.14 Append History Events
+`POST /api/v1/history/events`
+
+Request:
+```json
+{
+  "items": [
+    {
+      "bookId": 42,
+      "mediaType": "audio",
+      "eventType": "progress",
+      "positionRef": "time:00:12:33",
+      "eventAtUtc": "2026-02-18T12:32:00Z"
+    }
+  ]
+}
+```
+
+Rules:
+- Requires bearer auth in v1.
+- Deduplication key:
+  - `(userId, bookId, mediaType, eventType, positionRef, eventAtUtc)`.
+
+Response `200`:
+```json
+{
+  "added": 1,
+  "deduplicated": 0
+}
+```
+
+## 5.15 List History Events
+`GET /api/v1/history/events?bookId={bookId?}&mediaType={text|audio?}&page={page}&pageSize={pageSize}`
+
+Rules:
+- Requires bearer auth in v1.
+- Returns events sorted by `eventAtUtc DESC`.
+
 ## 6. Versioning and Compatibility
 - Breaking API changes require `/api/v2`.
 - Additive fields are allowed in v1 without version bump.

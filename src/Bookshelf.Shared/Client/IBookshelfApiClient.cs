@@ -67,4 +67,26 @@ public interface IBookshelfApiClient
         long shelfId,
         long bookId,
         CancellationToken cancellationToken = default);
+
+    Task<ProgressSnapshotDto> UpsertProgressAsync(
+        UpsertProgressRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ProgressSnapshotsResponse> ListProgressAsync(
+        long? bookId,
+        string? mediaType,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default);
+
+    Task<AppendHistoryEventsResponse> AppendHistoryEventsAsync(
+        AppendHistoryEventsRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<HistoryEventsResponse> ListHistoryEventsAsync(
+        long? bookId,
+        string? mediaType,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default);
 }

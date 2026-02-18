@@ -1,5 +1,6 @@
 @page "/books/{ProviderCode}/{ProviderBookKey}"
 @inject IBookshelfApiClient ApiClient
+@inject IOfflineSyncService OfflineSyncService
 
 <PageTitle>Book Details</PageTitle>
 
@@ -67,10 +68,14 @@ else if (_details is not null)
                 <button
                     class="btn touch-target"
                     type="button"
-                    disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_selectedCandidateId) || string.IsNullOrWhiteSpace(_selectedMediaType))"
+                    disabled="@(_isSubmitting || OfflineSyncService.IsOffline || string.IsNullOrWhiteSpace(_selectedCandidateId) || string.IsNullOrWhiteSpace(_selectedMediaType))"
                     @onclick="AddAndDownloadAsync">
                     Add to Library
                 </button>
+                @if (OfflineSyncService.IsOffline)
+                {
+                    <span class="state-text">Add/download requires network.</span>
+                }
             </div>
 
             @if (!string.IsNullOrWhiteSpace(_actionMessage))
@@ -131,11 +136,33 @@ else if (_details is not null)
         try
         {
             _details = await ApiClient.GetBookDetailsAsync(ProviderCode, ProviderBookKey);
-            var textTask = ApiClient.GetCandidatesAsync(ProviderCode, ProviderBookKey, "text");
-            var audioTask = ApiClient.GetCandidatesAsync(ProviderCode, ProviderBookKey, "audio");
-            await Task.WhenAll(textTask, audioTask);
-            _textCandidates = textTask.Result;
-            _audioCandidates = audioTask.Result;
+            if (OfflineSyncService.IsOffline)
+            {
+                _textCandidates = new DownloadCandidatesResponse(
+                    ProviderCode,
+                    ProviderBookKey,
+                    "text",
+                    Page: 1,
+                    PageSize: 20,
+                    Total: 0,
+                    Items: Array.Empty<DownloadCandidateDto>());
+                _audioCandidates = new DownloadCandidatesResponse(
+                    ProviderCode,
+                    ProviderBookKey,
+                    "audio",
+                    Page: 1,
+                    PageSize: 20,
+                    Total: 0,
+                    Items: Array.Empty<DownloadCandidateDto>());
+            }
+            else
+            {
+                var textTask = ApiClient.GetCandidatesAsync(ProviderCode, ProviderBookKey, "text");
+                var audioTask = ApiClient.GetCandidatesAsync(ProviderCode, ProviderBookKey, "audio");
+                await Task.WhenAll(textTask, audioTask);
+                _textCandidates = textTask.Result;
+                _audioCandidates = audioTask.Result;
+            }
         }
         catch (ApiClientException exception)
         {

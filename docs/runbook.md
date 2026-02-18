@@ -1,4 +1,4 @@
-# BookShelf Phase 8 Runbook
+# BookShelf Phase 9 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
@@ -101,6 +101,27 @@ Environment keys supported by the server:
   - Jobs: `/jobs`
   - Library: `/library`
   - Shelves: `/shelves`
+  - Reader: `/reader/{bookId}`
+  - Audio player: `/player/{bookId}`
+
+## Progress and History API
+- `PUT /api/v1/progress` upserts a snapshot for authenticated user from token claims.
+- `GET /api/v1/progress` returns paged snapshots with optional `bookId`/`mediaType` filters.
+- `POST /api/v1/history/events` appends history batch with deterministic dedupe.
+- `GET /api/v1/history/events` returns paged history events.
+
+## MAUI Offline Sync
+- Offline cache/queue database file:
+  - `<AppDataDirectory>/bookshelf-offline.db`
+- Sync triggers:
+  - app startup
+  - network reconnect
+  - periodic timer every 30 seconds when online
+  - manual `Sync now` action from top bar
+- Offline mode behavior:
+  - `Add to Library` disabled
+  - search/details/library/jobs can use cached responses
+  - reader/player progress + history writes are queued locally and replayed on reconnect
 
 ## Run API
 ```powershell

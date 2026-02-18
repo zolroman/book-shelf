@@ -24,6 +24,14 @@ public static class V1Endpoints
         library.MapGet(string.Empty, GetLibrary).RequireAuthorization();
         library.MapPost("/add-and-download", AddAndDownload);
 
+        var progress = v1.MapGroup("/progress").RequireAuthorization();
+        progress.MapPut(string.Empty, UpsertProgress);
+        progress.MapGet(string.Empty, ListProgress);
+
+        var history = v1.MapGroup("/history").RequireAuthorization();
+        history.MapPost("/events", AppendHistoryEvents);
+        history.MapGet("/events", ListHistoryEvents);
+
         var jobs = v1.MapGroup("/download-jobs");
         jobs.MapGet(string.Empty, ListDownloadJobs);
         jobs.MapGet("/{jobId:long}", GetDownloadJob);
@@ -273,6 +281,153 @@ public static class V1Endpoints
             throw new ApiException(
                 ApiErrorCodes.InvalidArgument,
                 "Invalid library filter argument.",
+                HttpStatusCode.BadRequest);
+        }
+    }
+
+    private static async Task<IResult> UpsertProgress(
+        UpsertProgressRequest request,
+        HttpContext httpContext,
+        IProgressHistoryService progressHistoryService,
+        CancellationToken cancellationToken)
+    {
+        var userId = EnsureUserIdFromClaims(httpContext.User);
+        if (request.BookId <= 0)
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "bookId must be greater than zero.",
+                HttpStatusCode.BadRequest);
+        }
+
+        _ = EnsureMediaType(request.MediaType);
+        EnsureRequired(request.PositionRef, nameof(request.PositionRef));
+
+        try
+        {
+            var response = await progressHistoryService.UpsertProgressAsync(
+                userId,
+                request,
+                cancellationToken);
+            return Results.Ok(response);
+        }
+        catch (BookIdNotFoundException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.BookNotFound,
+                "Book was not found.",
+                HttpStatusCode.NotFound);
+        }
+        catch (ArgumentException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "Invalid progress payload.",
+                HttpStatusCode.BadRequest);
+        }
+    }
+
+    private static async Task<IResult> ListProgress(
+        long? bookId,
+        string? mediaType,
+        int? page,
+        int? pageSize,
+        HttpContext httpContext,
+        IProgressHistoryService progressHistoryService,
+        CancellationToken cancellationToken)
+    {
+        var userId = EnsureUserIdFromClaims(httpContext.User);
+        var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
+        var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
+
+        try
+        {
+            var response = await progressHistoryService.ListProgressAsync(
+                userId,
+                bookId,
+                mediaType,
+                safePage,
+                safePageSize,
+                cancellationToken);
+            return Results.Ok(response);
+        }
+        catch (ArgumentException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "Invalid progress filter argument.",
+                HttpStatusCode.BadRequest);
+        }
+    }
+
+    private static async Task<IResult> AppendHistoryEvents(
+        AppendHistoryEventsRequest request,
+        HttpContext httpContext,
+        IProgressHistoryService progressHistoryService,
+        CancellationToken cancellationToken)
+    {
+        var userId = EnsureUserIdFromClaims(httpContext.User);
+        if (request.Items.Count == 0)
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "At least one history item is required.",
+                HttpStatusCode.BadRequest);
+        }
+
+        try
+        {
+            var response = await progressHistoryService.AppendHistoryAsync(
+                userId,
+                request,
+                cancellationToken);
+            return Results.Ok(response);
+        }
+        catch (BookIdNotFoundException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.BookNotFound,
+                "Book was not found.",
+                HttpStatusCode.NotFound);
+        }
+        catch (ArgumentException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "Invalid history payload.",
+                HttpStatusCode.BadRequest);
+        }
+    }
+
+    private static async Task<IResult> ListHistoryEvents(
+        long? bookId,
+        string? mediaType,
+        int? page,
+        int? pageSize,
+        HttpContext httpContext,
+        IProgressHistoryService progressHistoryService,
+        CancellationToken cancellationToken)
+    {
+        var userId = EnsureUserIdFromClaims(httpContext.User);
+        var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
+        var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
+
+        try
+        {
+            var response = await progressHistoryService.ListHistoryAsync(
+                userId,
+                bookId,
+                mediaType,
+                safePage,
+                safePageSize,
+                cancellationToken);
+            return Results.Ok(response);
+        }
+        catch (ArgumentException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "Invalid history filter argument.",
                 HttpStatusCode.BadRequest);
         }
     }

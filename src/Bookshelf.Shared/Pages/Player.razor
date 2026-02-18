@@ -1,0 +1,159 @@
+@page "/player/{BookId:long}"
+@inject IBookshelfApiClient ApiClient
+@inject ILocalMediaIndexService LocalMediaIndexService
+@inject IOfflineSyncService OfflineSyncService
+
+<PageTitle>Audio Player</PageTitle>
+
+<section class="page-block">
+    <h1>Audio Player</h1>
+    <p class="page-subtitle">Audio listening progress supports offline queue and reconnect sync.</p>
+</section>
+
+@if (_isLoading)
+{
+    <p class="state-text">Loading audio context...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel state-panel state-error" role="alert">
+        <h2>Audio player unavailable</h2>
+        <p>@_error</p>
+    </section>
+}
+else
+{
+    <section class="panel">
+        @if (_media is null || !_media.IsAvailable)
+        {
+            <p class="state-text">No local audio media found for this book.</p>
+        }
+        else
+        {
+            <p class="result-meta">Local source: @_media.LocalPath</p>
+            <p class="result-meta">Offline mode: @(OfflineSyncService.IsOffline ? "enabled" : "disabled")</p>
+        }
+
+        <div class="grid-2">
+            <label class="field">
+                <span>Position Reference</span>
+                <input class="touch-target" @bind="_positionRef" @bind:event="oninput" placeholder="time:00:05:30" />
+            </label>
+            <label class="field">
+                <span>Progress Percent</span>
+                <input class="touch-target" type="number" min="0" max="100" step="0.1" @bind="_progressPercent" @bind:event="oninput" />
+            </label>
+        </div>
+
+        <div class="action-row">
+            <button class="btn touch-target" type="button" disabled="@_isSaving" @onclick="SaveProgressAsync">Save Progress</button>
+            <button class="btn btn-secondary touch-target" type="button" disabled="@_isSaving" @onclick="CompleteAsync">Mark Completed</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <p class="@($"inline-message {_messageCssClass}")">@_message</p>
+        }
+    </section>
+}
+
+@code {
+    [Parameter]
+    public long BookId { get; set; }
+
+    private LocalMediaEntry? _media;
+    private bool _isLoading;
+    private bool _isSaving;
+    private string _positionRef = "time:00:00:00";
+    private decimal _progressPercent;
+    private string? _error;
+    private string? _message;
+    private string _messageCssClass = "inline-message-info";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        _message = null;
+
+        try
+        {
+            _media = await LocalMediaIndexService.GetAsync(BookId, "audio");
+            var progress = await ApiClient.ListProgressAsync(BookId, "audio", page: 1, pageSize: 1);
+            if (progress.Items.Count > 0)
+            {
+                var snapshot = progress.Items[0];
+                _positionRef = snapshot.PositionRef;
+                _progressPercent = snapshot.ProgressPercent;
+            }
+        }
+        catch (ApiClientException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveProgressAsync()
+    {
+        await SaveAsync("progress", _progressPercent);
+    }
+
+    private async Task CompleteAsync()
+    {
+        await SaveAsync("completed", 100m);
+    }
+
+    private async Task SaveAsync(string eventType, decimal percent)
+    {
+        _isSaving = true;
+        _message = null;
+
+        try
+        {
+            var nowUtc = DateTimeOffset.UtcNow;
+            var snapshot = await ApiClient.UpsertProgressAsync(
+                new UpsertProgressRequest(
+                    BookId: BookId,
+                    MediaType: "audio",
+                    PositionRef: _positionRef,
+                    ProgressPercent: percent,
+                    UpdatedAtUtc: nowUtc));
+            _progressPercent = snapshot.ProgressPercent;
+            _positionRef = snapshot.PositionRef;
+
+            await ApiClient.AppendHistoryEventsAsync(
+                new AppendHistoryEventsRequest(
+                    [
+                        new HistoryEventWriteDto(
+                            BookId: BookId,
+                            MediaType: "audio",
+                            EventType: eventType,
+                            PositionRef: _positionRef,
+                            EventAtUtc: nowUtc),
+                    ]));
+
+            _messageCssClass = "inline-message-success";
+            _message = OfflineSyncService.IsOffline
+                ? "Saved locally and queued for sync."
+                : "Progress saved.";
+        }
+        catch (ApiClientException exception)
+        {
+            _messageCssClass = "inline-message-error";
+            _message = exception.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

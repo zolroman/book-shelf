@@ -179,6 +179,56 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         await SendWithoutPayloadAsync(request, cancellationToken);
     }
 
+    public Task<ProgressSnapshotDto> UpsertProgressAsync(
+        UpsertProgressRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var httpRequest = CreateRequest(HttpMethod.Put, "/api/v1/progress");
+        httpRequest.Content = Serialize(request);
+        return SendAsync<ProgressSnapshotDto>(httpRequest, cancellationToken);
+    }
+
+    public Task<ProgressSnapshotsResponse> ListProgressAsync(
+        long? bookId,
+        string? mediaType,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var query = BuildQuery(
+            ("bookId", bookId?.ToString()),
+            ("mediaType", mediaType),
+            ("page", page.ToString()),
+            ("pageSize", pageSize.ToString()));
+        var request = CreateRequest(HttpMethod.Get, $"/api/v1/progress{query}");
+        return SendAsync<ProgressSnapshotsResponse>(request, cancellationToken);
+    }
+
+    public Task<AppendHistoryEventsResponse> AppendHistoryEventsAsync(
+        AppendHistoryEventsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var httpRequest = CreateRequest(HttpMethod.Post, "/api/v1/history/events");
+        httpRequest.Content = Serialize(request);
+        return SendAsync<AppendHistoryEventsResponse>(httpRequest, cancellationToken);
+    }
+
+    public Task<HistoryEventsResponse> ListHistoryEventsAsync(
+        long? bookId,
+        string? mediaType,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var query = BuildQuery(
+            ("bookId", bookId?.ToString()),
+            ("mediaType", mediaType),
+            ("page", page.ToString()),
+            ("pageSize", pageSize.ToString()));
+        var request = CreateRequest(HttpMethod.Get, $"/api/v1/history/events{query}");
+        return SendAsync<HistoryEventsResponse>(request, cancellationToken);
+    }
+
     private HttpRequestMessage CreateRequest(HttpMethod method, string relativeUri)
     {
         var request = new HttpRequestMessage(method, relativeUri);

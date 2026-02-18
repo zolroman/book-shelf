@@ -97,6 +97,10 @@
     padding: 0.35rem 1.4rem 0.7rem;
     color: #486169;
     font-size: 0.82rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
 }
 
 .session-token-hint code {
@@ -107,6 +111,24 @@
 
 .page-content {
     padding: 1rem 1.4rem 1.6rem;
+}
+
+.sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 600;
+}
+
+.offline-banner {
+    margin: 0.45rem 1.4rem 0;
+    border: 1px solid rgba(140, 78, 19, 0.35);
+    background: rgba(255, 238, 195, 0.9);
+    color: #6f470f;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.6rem;
+    font-size: 0.88rem;
+    font-weight: 600;
 }
 
 #blazor-error-ui {
@@ -142,5 +164,9 @@
 
     .session-token-hint {
         padding: 0.35rem 1rem 0.6rem;
+    }
+
+    .offline-banner {
+        margin: 0.45rem 1rem 0;
     }
 }

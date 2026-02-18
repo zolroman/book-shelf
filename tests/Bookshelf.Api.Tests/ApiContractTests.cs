@@ -345,6 +345,80 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Single(payload.Items);
     }
 
+    [Fact]
+    public async Task Progress_WithoutToken_ReturnsUnauthorized()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/progress");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Progress_WithToken_ReturnsSnapshot()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IProgressHistoryService>();
+                services.AddScoped<IProgressHistoryService>(_ => new StubProgressHistoryService());
+            });
+        });
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:21");
+
+        var response = await client.PutAsJsonAsync(
+            "/api/v1/progress",
+            new UpsertProgressRequest(
+                BookId: 42,
+                MediaType: "text",
+                PositionRef: "page:10",
+                ProgressPercent: 12.5m,
+                UpdatedAtUtc: new DateTimeOffset(2026, 2, 18, 12, 0, 0, TimeSpan.Zero)));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ProgressSnapshotDto>();
+        Assert.NotNull(payload);
+        Assert.Equal(21, payload!.UserId);
+        Assert.Equal(42, payload.BookId);
+    }
+
+    [Fact]
+    public async Task History_WithToken_ReturnsAppendResponse()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IProgressHistoryService>();
+                services.AddScoped<IProgressHistoryService>(_ => new StubProgressHistoryService());
+            });
+        });
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:21");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/history/events",
+            new AppendHistoryEventsRequest(
+                [
+                    new HistoryEventWriteDto(
+                        BookId: 42,
+                        MediaType: "text",
+                        EventType: "progress",
+                        PositionRef: "page:10",
+                        EventAtUtc: new DateTimeOffset(2026, 2, 18, 12, 5, 0, TimeSpan.Zero)),
+                ]));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<AppendHistoryEventsResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(1, payload!.Added);
+    }
+
     private sealed class StubCandidateDiscoveryService : ICandidateDiscoveryService
     {
         public Task<DownloadCandidatesResponse> FindAsync(
@@ -524,6 +598,86 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
                             CatalogState: "library",
                             CreatedAtUtc: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
                             UpdatedAtUtc: new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero)),
+                    ]));
+        }
+    }
+
+    private sealed class StubProgressHistoryService : IProgressHistoryService
+    {
+        public Task<ProgressSnapshotDto> UpsertProgressAsync(
+            long userId,
+            UpsertProgressRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new ProgressSnapshotDto(
+                    UserId: userId,
+                    BookId: request.BookId,
+                    MediaType: request.MediaType,
+                    PositionRef: request.PositionRef,
+                    ProgressPercent: request.ProgressPercent,
+                    UpdatedAtUtc: request.UpdatedAtUtc ?? DateTimeOffset.UtcNow));
+        }
+
+        public Task<ProgressSnapshotsResponse> ListProgressAsync(
+            long userId,
+            long? bookId,
+            string? mediaType,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new ProgressSnapshotsResponse(
+                    Page: page,
+                    PageSize: pageSize,
+                    Total: 1,
+                    Items:
+                    [
+                        new ProgressSnapshotDto(
+                            UserId: userId,
+                            BookId: bookId ?? 42,
+                            MediaType: mediaType ?? "text",
+                            PositionRef: "page:10",
+                            ProgressPercent: 10m,
+                            UpdatedAtUtc: DateTimeOffset.UtcNow),
+                    ]));
+        }
+
+        public Task<AppendHistoryEventsResponse> AppendHistoryAsync(
+            long userId,
+            AppendHistoryEventsRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new AppendHistoryEventsResponse(
+                    Added: request.Items.Count,
+                    Deduplicated: 0));
+        }
+
+        public Task<HistoryEventsResponse> ListHistoryAsync(
+            long userId,
+            long? bookId,
+            string? mediaType,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new HistoryEventsResponse(
+                    Page: page,
+                    PageSize: pageSize,
+                    Total: 1,
+                    Items:
+                    [
+                        new HistoryEventDto(
+                            Id: 1,
+                            UserId: userId,
+                            BookId: bookId ?? 42,
+                            MediaType: mediaType ?? "text",
+                            EventType: "progress",
+                            PositionRef: "page:10",
+                            EventAtUtc: DateTimeOffset.UtcNow),
                     ]));
         }
     }

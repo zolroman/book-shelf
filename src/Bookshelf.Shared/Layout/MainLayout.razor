@@ -1,6 +1,8 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject NavigationManager NavigationManager
 @inject UserSessionState UserSessionState
+@inject IOfflineSyncService OfflineSyncService
 
 <div class="app-shell">
     <header class="top-bar">
@@ -33,8 +35,29 @@
         </div>
     </header>
 
+    @if (OfflineSyncService.IsOffline)
+    {
+        <div class="offline-banner" role="status">
+            Offline mode enabled. Add/download is disabled. Read/listen local media and queue progress/history updates.
+        </div>
+    }
+
     <div class="session-token-hint">
         Library auth header: <code>Bearer uid:@UserSessionState.UserId</code>
+        <span class="sync-indicator">
+            Sync: @OfflineSyncService.StatusText
+            @if (OfflineSyncService.LastSyncAtUtc.HasValue)
+            {
+                <span>(last @OfflineSyncService.LastSyncAtUtc.Value.ToString("HH:mm:ss"))</span>
+            }
+        </span>
+        <button
+            class="btn btn-secondary touch-target"
+            type="button"
+            disabled="@OfflineSyncService.IsSyncing"
+            @onclick="TriggerManualSyncAsync">
+            Sync now
+        </button>
     </div>
 
     <main class="page-content">
@@ -51,9 +74,16 @@
 @code {
     private long _userIdInput;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _userIdInput = UserSessionState.UserId;
+        OfflineSyncService.Changed += OnSyncStateChanged;
+        await OfflineSyncService.EnsureStartedAsync();
+    }
+
+    public void Dispose()
+    {
+        OfflineSyncService.Changed -= OnSyncStateChanged;
     }
 
     private void ApplyUserId()
@@ -65,9 +95,16 @@
         }
 
         UserSessionState.UserId = _userIdInput;
-        if (NavigationManager.Uri.EndsWith("/library", StringComparison.OrdinalIgnoreCase))
-        {
-            NavigationManager.NavigateTo("/library", forceLoad: false);
-        }
+        NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+    }
+
+    private async Task TriggerManualSyncAsync()
+    {
+        await OfflineSyncService.TriggerManualSyncAsync();
+    }
+
+    private void OnSyncStateChanged(object? sender, EventArgs e)
+    {
+        _ = InvokeAsync(StateHasChanged);
     }
 }

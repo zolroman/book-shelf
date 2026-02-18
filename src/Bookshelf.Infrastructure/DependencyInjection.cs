@@ -98,6 +98,8 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IShelfRepository, ShelfRepository>();
         services.AddScoped<IDownloadJobRepository, DownloadJobRepository>();
+        services.AddScoped<IProgressSnapshotRepository, ProgressSnapshotRepository>();
+        services.AddScoped<IHistoryEventRepository, HistoryEventRepository>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 
         return services;

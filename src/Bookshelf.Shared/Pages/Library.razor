@@ -1,5 +1,6 @@
 @page "/library"
 @inject IBookshelfApiClient ApiClient
+@inject NavigationManager NavigationManager
 
 <PageTitle>Library</PageTitle>
 
@@ -84,14 +85,14 @@ else if (_library is not null)
                             class="btn btn-secondary touch-target"
                             type="button"
                             disabled="@(!book.HasTextMedia)"
-                            @onclick="ShowReaderPendingMessage">
+                            @onclick="() => OpenReader(book.Id)">
                             Read
                         </button>
                         <button
                             class="btn btn-secondary touch-target"
                             type="button"
                             disabled="@(!book.HasAudioMedia)"
-                            @onclick="ShowReaderPendingMessage">
+                            @onclick="() => OpenPlayer(book.Id)">
                             Listen
                         </button>
 
@@ -245,9 +246,13 @@ else if (_library is not null)
         }
     }
 
-    private void ShowReaderPendingMessage()
+    private void OpenReader(long bookId)
     {
-        _messageCssClass = "inline-message-info";
-        _message = "Reader/listener views are delivered in Phase 9.";
+        NavigationManager.NavigateTo($"/reader/{bookId}");
+    }
+
+    private void OpenPlayer(long bookId)
+    {
+        NavigationManager.NavigateTo($"/player/{bookId}");
     }
 }

@@ -1,5 +1,6 @@
 using Bookshelf.Web.Components;
 using Bookshelf.Shared.Client;
+using Bookshelf.Web.Services;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,6 +10,9 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.Configure<BookshelfApiOptions>(builder.Configuration.GetSection("BookshelfApi"));
 builder.Services.AddScoped<UserSessionState>();
+builder.Services.AddSingleton<IConnectivityState, AlwaysOnlineConnectivityState>();
+builder.Services.AddSingleton<IOfflineSyncService, NoopOfflineSyncService>();
+builder.Services.AddSingleton<ILocalMediaIndexService, NoopLocalMediaIndexService>();
 builder.Services.AddHttpClient<IBookshelfApiClient, BookshelfApiClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<IOptions<BookshelfApiOptions>>().Value;
