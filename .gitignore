@@ -17,6 +17,7 @@
 
 # Test
 TestResults/
+artifacts/
 
 # Local .NET CLI state
 .dotnet/

@@ -12,6 +12,72 @@ namespace Bookshelf.Application.Tests;
 public class DownloadJobServiceTests
 {
     [Fact]
+    public async Task ListAsync_NormalizesPagingAndFiltersByStatus()
+    {
+        var fixture = CreateFixture();
+        var completed = CreateQueuedJob(jobId: 100, userId: 10, bookId: 100, externalJobId: "hash-100");
+        completed.TransitionTo(DownloadJobStatus.Downloading, DateTimeOffset.UtcNow.AddMinutes(-2));
+        completed.TransitionTo(DownloadJobStatus.Completed, DateTimeOffset.UtcNow.AddMinutes(-1));
+        fixture.JobRepository.Jobs.Add(completed);
+
+        var failed = CreateQueuedJob(jobId: 101, userId: 10, bookId: 100, externalJobId: "hash-101");
+        failed.TransitionTo(DownloadJobStatus.Failed, DateTimeOffset.UtcNow, "provider_error");
+        fixture.JobRepository.Jobs.Add(failed);
+
+        var response = await fixture.Service.ListAsync(
+            userId: 10,
+            status: "completed",
+            page: 0,
+            pageSize: 1000);
+
+        Assert.Equal(1, response.Page);
+        Assert.Equal(20, response.PageSize);
+        Assert.Equal(1, response.Total);
+        var item = Assert.Single(response.Items);
+        Assert.Equal("completed", item.Status);
+    }
+
+    [Fact]
+    public async Task ListAsync_InvalidStatus_Throws()
+    {
+        var fixture = CreateFixture();
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            async () => await fixture.Service.ListAsync(10, "unsupported", 1, 20));
+    }
+
+    [Fact]
+    public async Task GetAsync_ReturnsNull_WhenMissingOrWrongUser()
+    {
+        var fixture = CreateFixture();
+        var existing = CreateQueuedJob(jobId: 200, userId: 99, bookId: 100, externalJobId: "hash-200");
+        fixture.JobRepository.Jobs.Add(existing);
+
+        var missing = await fixture.Service.GetAsync(jobId: 999, userId: 99);
+        var wrongUser = await fixture.Service.GetAsync(jobId: 200, userId: 10);
+
+        Assert.Null(missing);
+        Assert.Null(wrongUser);
+    }
+
+    [Fact]
+    public async Task GetAsync_ActiveJob_SynchronizesBeforeReturning()
+    {
+        var fixture = CreateFixture();
+        var job = CreateQueuedJob(jobId: 201, userId: 10, bookId: 100, externalJobId: "hash-201");
+        fixture.JobRepository.Jobs.Add(job);
+        fixture.ExecutionClient.StatusByExternalId["hash-201"] = new DownloadStatusResult(
+            ExternalDownloadState.Downloading,
+            StoragePath: null,
+            SizeBytes: null);
+
+        var result = await fixture.Service.GetAsync(201, 10);
+
+        Assert.NotNull(result);
+        Assert.Equal("downloading", result!.Status);
+    }
+
+    [Fact]
     public async Task SyncActiveAsync_NotFoundWithinGrace_KeepsJobActive()
     {
         var fixture = CreateFixture();
@@ -96,6 +162,60 @@ public class DownloadJobServiceTests
         await fixture.Service.SyncActiveAsync();
 
         Assert.Equal(DownloadJobStatus.Downloading, job.Status);
+    }
+
+    [Fact]
+    public async Task SyncActiveAsync_ExternalFailed_MarksFailedWithProviderError()
+    {
+        var fixture = CreateFixture();
+        var job = CreateQueuedJob(jobId: 41, userId: 10, bookId: 100, externalJobId: "hash-41");
+        job.TransitionTo(DownloadJobStatus.Downloading, DateTimeOffset.UtcNow);
+        fixture.JobRepository.Jobs.Add(job);
+        fixture.ExecutionClient.StatusByExternalId["hash-41"] = new DownloadStatusResult(
+            ExternalDownloadState.Failed,
+            StoragePath: null,
+            SizeBytes: null);
+
+        await fixture.Service.SyncActiveAsync();
+
+        Assert.Equal(DownloadJobStatus.Failed, job.Status);
+        Assert.Equal("provider_error", job.FailureReason);
+    }
+
+    [Fact]
+    public async Task SyncActiveAsync_QueuedState_ClearsNotFoundMarker()
+    {
+        var fixture = CreateFixture();
+        var job = CreateQueuedJob(jobId: 42, userId: 10, bookId: 100, externalJobId: "hash-42");
+        SetProperty(job, "FirstNotFoundAtUtc", DateTimeOffset.UtcNow.AddSeconds(-30));
+        fixture.JobRepository.Jobs.Add(job);
+        fixture.ExecutionClient.StatusByExternalId["hash-42"] = new DownloadStatusResult(
+            ExternalDownloadState.Queued,
+            StoragePath: null,
+            SizeBytes: null);
+
+        await fixture.Service.SyncActiveAsync();
+
+        Assert.Null(job.FirstNotFoundAtUtc);
+        Assert.Equal(DownloadJobStatus.Queued, job.Status);
+    }
+
+    [Fact]
+    public async Task SyncActiveAsync_CompletedWithMissingBook_MarksJobFailed()
+    {
+        var fixture = CreateFixture();
+        var job = CreateQueuedJob(jobId: 43, userId: 10, bookId: 404, externalJobId: "hash-43");
+        job.TransitionTo(DownloadJobStatus.Downloading, DateTimeOffset.UtcNow);
+        fixture.JobRepository.Jobs.Add(job);
+        fixture.ExecutionClient.StatusByExternalId["hash-43"] = new DownloadStatusResult(
+            ExternalDownloadState.Completed,
+            StoragePath: "D:\\media\\missing-book.epub",
+            SizeBytes: 10);
+
+        await fixture.Service.SyncActiveAsync();
+
+        Assert.Equal(DownloadJobStatus.Failed, job.Status);
+        Assert.Equal("book_not_found", job.FailureReason);
     }
 
     [Fact]

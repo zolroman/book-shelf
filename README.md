@@ -13,7 +13,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 10 Observability and Hardening Baseline
+## Phase 11 Release Candidate Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
@@ -82,6 +82,19 @@ Requirements are defined in `requirements/` and are the source of truth.
   - `scripts/db-restore.ps1`
   - `scripts/db-backup-restore-smoke.ps1`
 - Connection string now requires explicit configuration (`BOOKSHELF_CONNECTION_STRING` or `ConnectionStrings:Bookshelf`)
+- Phase 11 regression suite passed:
+  - Domain: 20 tests
+  - Application: 46 tests
+  - Infrastructure: 18 tests
+  - API: 23 tests
+- Coverage gate (Domain + Application) validated:
+  - Domain: 83.05% line coverage
+  - Application: 88.90% line coverage
+  - Combined: 87.33% line coverage
+- Release docs:
+  - `docs/phase11_qa_signoff.md`
+  - `docs/release_notes_v1_rc1.md`
+  - `docs/known_issues.md`
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 

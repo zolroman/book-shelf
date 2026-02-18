@@ -1,4 +1,4 @@
-# BookShelf Phase 10 Runbook
+# BookShelf Phase 11 Deployment Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
@@ -175,6 +175,32 @@ pwsh -File scripts/db-restore.ps1 -BackupFile "artifacts/backups/bookshelf-20260
 Smoke check (backup + archive validation):
 ```powershell
 pwsh -File scripts/db-backup-restore-smoke.ps1 -ConnectionString "Host=...;Port=5432;Database=...;Username=...;Password=..."
+```
+
+## Release Deployment (v1.0.0-rc1)
+1. Export required environment variables:
+   - `BOOKSHELF_CONNECTION_STRING`
+   - `JACKETT_API_KEY`
+   - optional telemetry key: `OTEL_EXPORTER_OTLP_ENDPOINT`
+2. Create pre-deploy backup:
+```powershell
+pwsh -File scripts/db-backup.ps1 -ConnectionString $env:BOOKSHELF_CONNECTION_STRING
+```
+3. Apply EF migrations:
+```powershell
+dotnet ef database update --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj
+```
+4. Start API and verify:
+   - `GET /health/live`
+   - `GET /health/ready`
+   - `GET /api/v1/system/ping`
+5. Start Web host and validate key flows:
+   - search -> details -> candidates -> add/download
+   - library and shelves
+   - jobs list/cancel
+6. Optional post-deploy backup smoke:
+```powershell
+pwsh -File scripts/db-backup-restore-smoke.ps1 -ConnectionString $env:BOOKSHELF_CONNECTION_STRING
 ```
 
 ## Run Web

@@ -102,7 +102,101 @@ public class ProgressHistoryServiceTests
                     MediaType: "text",
                     PositionRef: "p10",
                     ProgressPercent: 10m,
-                    UpdatedAtUtc: DateTimeOffset.UtcNow)));
+                UpdatedAtUtc: DateTimeOffset.UtcNow)));
+    }
+
+    [Fact]
+    public async Task ListProgress_AppliesPagingAndFilters()
+    {
+        var dependencies = CreateDependencies();
+        IProgressHistoryService service = CreateService(dependencies);
+
+        await service.UpsertProgressAsync(
+            1,
+            new UpsertProgressRequest(10, "text", "p10", 10m, DateTimeOffset.UtcNow.AddMinutes(-2)));
+        await service.UpsertProgressAsync(
+            1,
+            new UpsertProgressRequest(10, "audio", "a10", 10m, DateTimeOffset.UtcNow.AddMinutes(-1)));
+
+        var response = await service.ListProgressAsync(
+            userId: 1,
+            bookId: 10,
+            mediaType: "text",
+            page: 0,
+            pageSize: 1000);
+
+        Assert.Equal(1, response.Page);
+        Assert.Equal(20, response.PageSize);
+        Assert.Equal(1, response.Total);
+        var item = Assert.Single(response.Items);
+        Assert.Equal("text", item.MediaType);
+    }
+
+    [Fact]
+    public async Task ListProgress_InvalidFilter_Throws()
+    {
+        var dependencies = CreateDependencies();
+        IProgressHistoryService service = CreateService(dependencies);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            async () => await service.ListProgressAsync(1, 0, null, 1, 20));
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            async () => await service.ListProgressAsync(1, 10, "video", 1, 20));
+    }
+
+    [Fact]
+    public async Task AppendHistory_EmptyBatch_ReturnsZeroWithoutSaving()
+    {
+        var dependencies = CreateDependencies();
+        IProgressHistoryService service = CreateService(dependencies);
+
+        var result = await service.AppendHistoryAsync(1, new AppendHistoryEventsRequest(Array.Empty<HistoryEventWriteDto>()));
+
+        Assert.Equal(0, result.Added);
+        Assert.Equal(0, result.Deduplicated);
+        Assert.Equal(0, dependencies.UnitOfWork.SaveChangesCalls);
+    }
+
+    [Fact]
+    public async Task ListHistory_AppliesPagingAndFilters()
+    {
+        var dependencies = CreateDependencies();
+        IProgressHistoryService service = CreateService(dependencies);
+
+        await service.AppendHistoryAsync(
+            1,
+            new AppendHistoryEventsRequest(
+                [
+                    new HistoryEventWriteDto(10, "text", "started", "p1", DateTimeOffset.UtcNow.AddMinutes(-2)),
+                    new HistoryEventWriteDto(10, "audio", "progress", "a1", DateTimeOffset.UtcNow.AddMinutes(-1)),
+                ]));
+
+        var response = await service.ListHistoryAsync(
+            userId: 1,
+            bookId: 10,
+            mediaType: "audio",
+            page: 0,
+            pageSize: 1000);
+
+        Assert.Equal(1, response.Page);
+        Assert.Equal(20, response.PageSize);
+        Assert.Equal(1, response.Total);
+        var item = Assert.Single(response.Items);
+        Assert.Equal("audio", item.MediaType);
+    }
+
+    [Fact]
+    public async Task ListHistory_InvalidFilter_Throws()
+    {
+        var dependencies = CreateDependencies();
+        IProgressHistoryService service = CreateService(dependencies);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            async () => await service.ListHistoryAsync(1, 0, null, 1, 20));
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            async () => await service.ListHistoryAsync(1, 10, "video", 1, 20));
     }
 
     private static IProgressHistoryService CreateService(TestDependencies dependencies)
@@ -418,8 +512,11 @@ public class ProgressHistoryServiceTests
 
     private sealed class FakeUnitOfWork : IUnitOfWork
     {
+        public int SaveChangesCalls { get; private set; }
+
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
+            SaveChangesCalls++;
             return Task.FromResult(1);
         }
     }
