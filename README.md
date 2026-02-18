@@ -1,30 +1,29 @@
-# Bookshelf
+# BookShelf
 
-Bookshelf is a starter implementation of a web/mobile reading service:
-- ASP.NET Core API (`src/Bookshelf.Api`)
-- .NET MAUI Hybrid Blazor app (`src/Bookshelf.App`)
+BookShelf is a .NET 10 solution for a shared catalog + personal shelf book platform.
+Requirements are defined in `requirements/` and are the source of truth.
 
-## Run API
+## Solution Structure
+- `src/Bookshelf.Domain` - domain core and invariants.
+- `src/Bookshelf.Application` - application layer services/use cases.
+- `src/Bookshelf.Infrastructure` - external adapters and persistence integration.
+- `src/Bookshelf.Shared` - shared contracts/DTOs and shared UI components.
+- `src/Bookshelf.Api` - ASP.NET Core API host.
+- `src/Bookshelf.Web` - web host for Blazor UI.
+- `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
+- `tests/*` - unit/integration test projects.
+
+## Phase 0 Baseline
+- Health endpoint: `GET /health`
+- Ping endpoint: `GET /api/v1/system/ping`
+- CI pipeline: build + tests for backend/web/test projects
+- Coding standards: nullable enabled, analyzers enabled, warnings as errors
+
+## Local Commands
 ```powershell
-dotnet run --project src/Bookshelf.Api/Bookshelf.Api.csproj
-```
-API base URL: `http://localhost:5281`
-
-## Run MAUI App (Windows)
-```powershell
-dotnet build src/Bookshelf.App/Bookshelf.App.csproj -f net9.0-windows10.0.19041.0
-dotnet run --project src/Bookshelf.App/Bookshelf.App.csproj -f net9.0-windows10.0.19041.0
+dotnet restore src/Bookshelf.Api/Bookshelf.Api.csproj
+dotnet build src/Bookshelf.Api/Bookshelf.Api.csproj --no-restore
+dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj --no-restore
 ```
 
-## Project Structure
-- `src/Bookshelf.Domain`: core entities and rules.
-- `src/Bookshelf.Infrastructure`: in-memory repository and provider abstractions.
-- `src/Bookshelf.Shared`: shared API contracts/DTOs.
-- `src/Bookshelf.Api`: REST API controllers.
-- `src/Bookshelf.App`: MAUI Hybrid Blazor UI with offline cache fallback.
-- `tests/*`: domain/infrastructure/api tests.
-
-## Notes
-- This is the implementation baseline from `codex_project_plan.md` (Phase 0/1/2 skeleton).
-- Infrastructure currently uses in-memory persistence; replace with PostgreSQL in next phase.
-- Offline guarantee in current version: deleting local asset state does not delete history/progress/library records.
+For full Phase 0 run steps, see `docs/runbook.md`.

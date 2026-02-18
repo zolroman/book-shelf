@@ -13,23 +13,33 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
-      - name: Restore backend and tests
+      - name: Restore backend, web, and tests
         run: |
           dotnet restore src/Bookshelf.Domain/Bookshelf.Domain.csproj
-          dotnet restore src/Bookshelf.Shared/Bookshelf.Shared.csproj
+          dotnet restore src/Bookshelf.Application/Bookshelf.Application.csproj
           dotnet restore src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj
+          dotnet restore src/Bookshelf.Shared/Bookshelf.Shared.csproj
+          dotnet restore src/Bookshelf.Web/Bookshelf.Web.csproj
           dotnet restore src/Bookshelf.Api/Bookshelf.Api.csproj
           dotnet restore tests/Bookshelf.Domain.Tests/Bookshelf.Domain.Tests.csproj
+          dotnet restore tests/Bookshelf.Application.Tests/Bookshelf.Application.Tests.csproj
           dotnet restore tests/Bookshelf.Infrastructure.Tests/Bookshelf.Infrastructure.Tests.csproj
           dotnet restore tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj
 
-      - name: Build backend
-        run: dotnet build src/Bookshelf.Api/Bookshelf.Api.csproj --no-restore
+      - name: Build backend and web
+        run: |
+          dotnet build src/Bookshelf.Domain/Bookshelf.Domain.csproj --no-restore
+          dotnet build src/Bookshelf.Application/Bookshelf.Application.csproj --no-restore
+          dotnet build src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --no-restore
+          dotnet build src/Bookshelf.Shared/Bookshelf.Shared.csproj --no-restore
+          dotnet build src/Bookshelf.Web/Bookshelf.Web.csproj --no-restore
+          dotnet build src/Bookshelf.Api/Bookshelf.Api.csproj --no-restore
 
       - name: Test
         run: |
           dotnet test tests/Bookshelf.Domain.Tests/Bookshelf.Domain.Tests.csproj --no-restore
+          dotnet test tests/Bookshelf.Application.Tests/Bookshelf.Application.Tests.csproj --no-restore
           dotnet test tests/Bookshelf.Infrastructure.Tests/Bookshelf.Infrastructure.Tests.csproj --no-restore
           dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj --no-restore
