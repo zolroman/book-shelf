@@ -217,3 +217,4 @@ CREATE UNIQUE INDEX ux_active_download_per_book_type
 - [High-Level Project Description](./project_description.md)
 - [Detailed Requirements](./detailed_requirements.md)
 - [Search and Add-to-Library Algorithm](./search_and_add_algorithm.md)
+- [Requirements Index](./README.md)

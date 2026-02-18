@@ -42,6 +42,7 @@ Detailed terms, data rules, flows, and MVP behavior are documented in:
 - [Detailed Requirements](./detailed_requirements.md)
 - [Database Description](./database_description.md)
 - [Search and Add-to-Library Algorithm](./search_and_add_algorithm.md)
+- [Requirements Index](./README.md)
 
 ## Status
 This file is intentionally high-level and is used as an entry point.
