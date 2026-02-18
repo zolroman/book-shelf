@@ -11,4 +11,11 @@ public interface ICandidateDiscoveryService
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);
+
+    Task<DownloadCandidateDto?> ResolveAsync(
+        string providerCode,
+        string providerBookKey,
+        string mediaType,
+        string candidateId,
+        CancellationToken cancellationToken = default);
 }

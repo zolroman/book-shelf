@@ -169,7 +169,10 @@ public static class V1Endpoints
         }
     }
 
-    private static IResult AddAndDownload(AddAndDownloadRequest request, InMemoryApiStore store)
+    private static async Task<IResult> AddAndDownload(
+        AddAndDownloadRequest request,
+        IAddAndDownloadService addAndDownloadService,
+        CancellationToken cancellationToken)
     {
         EnsureUserId(request.UserId);
         EnsureRequired(request.ProviderCode, nameof(request.ProviderCode));
@@ -184,8 +187,53 @@ public static class V1Endpoints
                 HttpStatusCode.BadRequest);
         }
 
-        var response = store.CreateDownloadJob(request);
-        return Results.Ok(response);
+        try
+        {
+            var response = await addAndDownloadService.ExecuteAsync(request, cancellationToken);
+            return Results.Ok(response);
+        }
+        catch (BookNotFoundException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.BookNotFound,
+                "Book was not found in metadata provider.",
+                HttpStatusCode.NotFound);
+        }
+        catch (DownloadCandidateNotFoundException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.CandidateNotFound,
+                "Selected candidate was not found.",
+                HttpStatusCode.NotFound);
+        }
+        catch (MetadataProviderUnavailableException exception)
+        {
+            throw new ApiException(
+                ApiErrorCodes.FantlabUnavailable,
+                $"Metadata provider '{exception.ProviderCode}' is unavailable.",
+                HttpStatusCode.BadGateway);
+        }
+        catch (DownloadCandidateProviderUnavailableException exception)
+        {
+            throw new ApiException(
+                ApiErrorCodes.JackettUnavailable,
+                $"Candidate provider '{exception.ProviderCode}' is unavailable.",
+                HttpStatusCode.BadGateway);
+        }
+        catch (DownloadExecutionUnavailableException exception)
+        {
+            throw new ApiException(
+                ApiErrorCodes.QBittorrentUnavailable,
+                $"Download provider '{exception.ProviderCode}' is unavailable.",
+                HttpStatusCode.BadGateway);
+        }
+        catch (DownloadExecutionFailedException exception)
+        {
+            throw new ApiException(
+                ApiErrorCodes.QBittorrentEnqueueFailed,
+                $"Download provider '{exception.ProviderCode}' failed to enqueue torrent.",
+                HttpStatusCode.BadGateway);
+        }
     }
 
     private static IResult ListDownloadJobs(

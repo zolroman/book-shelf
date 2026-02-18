@@ -188,6 +188,56 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("FANTLAB_UNAVAILABLE", payload!.Code);
     }
 
+    [Fact]
+    public async Task AddAndDownload_WhenCandidateNotFound_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAddAndDownloadService>();
+                services.AddScoped<IAddAndDownloadService>(_ => new ThrowingAddAndDownloadService(
+                    new DownloadCandidateNotFoundException("missing")));
+            });
+        });
+
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/library/add-and-download",
+            new AddAndDownloadRequest(1, "fantlab", "123", "audio", "jackett:missing"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("CANDIDATE_NOT_FOUND", payload!.Code);
+    }
+
+    [Fact]
+    public async Task AddAndDownload_WhenQBittorrentUnavailable_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAddAndDownloadService>();
+                services.AddScoped<IAddAndDownloadService>(_ => new ThrowingAddAndDownloadService(
+                    new DownloadExecutionUnavailableException("qbittorrent", "down")));
+            });
+        });
+
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/library/add-and-download",
+            new AddAndDownloadRequest(1, "fantlab", "123", "audio", "jackett:abc"));
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("QBITTORRENT_UNAVAILABLE", payload!.Code);
+    }
+
     private sealed class StubCandidateDiscoveryService : ICandidateDiscoveryService
     {
         public Task<DownloadCandidatesResponse> FindAsync(
@@ -218,6 +268,29 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
                             734003200),
                     }));
         }
+
+        public Task<DownloadCandidateDto?> ResolveAsync(
+            string providerCode,
+            string providerBookKey,
+            string mediaType,
+            string candidateId,
+            CancellationToken cancellationToken = default)
+        {
+            if (candidateId.Equals("jackett:abc123", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult<DownloadCandidateDto?>(
+                    new DownloadCandidateDto(
+                        "jackett:abc123",
+                        "audio",
+                        "Dune Audiobook",
+                        "magnet:?xt=urn:btih:abc123",
+                        "https://tracker.example/item/123",
+                        52,
+                        734003200));
+            }
+
+            return Task.FromResult<DownloadCandidateDto?>(null);
+        }
     }
 
     private sealed class ThrowingCandidateDiscoveryService : ICandidateDiscoveryService
@@ -235,6 +308,33 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             string mediaType,
             int page,
             int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
+        public Task<DownloadCandidateDto?> ResolveAsync(
+            string providerCode,
+            string providerBookKey,
+            string mediaType,
+            string candidateId,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+    }
+
+    private sealed class ThrowingAddAndDownloadService : IAddAndDownloadService
+    {
+        private readonly Exception _exception;
+
+        public ThrowingAddAndDownloadService(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public Task<AddAndDownloadResponse> ExecuteAsync(
+            AddAndDownloadRequest request,
             CancellationToken cancellationToken = default)
         {
             throw _exception;

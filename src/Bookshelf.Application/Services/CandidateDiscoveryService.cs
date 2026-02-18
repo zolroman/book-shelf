@@ -113,6 +113,30 @@ public sealed class CandidateDiscoveryService : ICandidateDiscoveryService
             Items: paged);
     }
 
+    public async Task<DownloadCandidateDto?> ResolveAsync(
+        string providerCode,
+        string providerBookKey,
+        string mediaType,
+        string candidateId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(candidateId))
+        {
+            return null;
+        }
+
+        var response = await FindAsync(
+            providerCode,
+            providerBookKey,
+            mediaType,
+            page: 1,
+            pageSize: 100,
+            cancellationToken);
+
+        return response.Items.FirstOrDefault(
+            x => x.CandidateId.Equals(candidateId.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
     private IDownloadCandidateProvider GetProvider(string providerCode)
     {
         if (_providerByCode.TryGetValue(providerCode, out var provider))

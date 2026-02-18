@@ -2,6 +2,7 @@ using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Abstractions.Persistence;
 using Bookshelf.Infrastructure.Integrations.FantLab;
 using Bookshelf.Infrastructure.Integrations.Jackett;
+using Bookshelf.Infrastructure.Integrations.QBittorrent;
 using Bookshelf.Infrastructure.Persistence;
 using Bookshelf.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.Caching.Memory;
@@ -56,6 +57,17 @@ public static class DependencyInjection
             options.RetryDelayMs = GetInt(configuration, "JACKETT_RETRY_DELAY_MS", "Jackett:RetryDelayMs", 300);
             options.MaxItems = GetInt(configuration, "JACKETT_MAX_ITEMS", "Jackett:MaxItems", 50);
         });
+        services.Configure<QBittorrentOptions>(options =>
+        {
+            options.BaseUrl = GetString(configuration, "QBITTORRENT_BASE_URL", "QBittorrent:BaseUrl", "http://192.168.40.25:8070");
+            options.AuthMode = GetString(configuration, "QBITTORRENT_AUTH_MODE", "QBittorrent:AuthMode", "none");
+            options.Username = GetString(configuration, "QBITTORRENT_USERNAME", "QBittorrent:Username", string.Empty);
+            options.Password = GetString(configuration, "QBITTORRENT_PASSWORD", "QBittorrent:Password", string.Empty);
+            options.TimeoutSeconds = GetInt(configuration, "QBITTORRENT_TIMEOUT_SECONDS", "QBittorrent:TimeoutSeconds", 15);
+            options.MaxRetries = GetInt(configuration, "QBITTORRENT_MAX_RETRIES", "QBittorrent:MaxRetries", 2);
+            options.RetryDelayMs = GetInt(configuration, "QBITTORRENT_RETRY_DELAY_MS", "QBittorrent:RetryDelayMs", 300);
+            options.NotFoundGraceSeconds = GetInt(configuration, "QBITTORRENT_NOT_FOUND_GRACE_SECONDS", "QBittorrent:NotFoundGraceSeconds", 60);
+        });
 
         services.AddHttpClient<FantLabMetadataProvider>((serviceProvider, client) =>
         {
@@ -69,12 +81,21 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
         });
+        services.AddHttpClient<QBittorrentDownloadClient>((serviceProvider, client) =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<QBittorrentOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
+        });
         services.AddScoped<IMetadataProvider>(serviceProvider =>
             serviceProvider.GetRequiredService<FantLabMetadataProvider>());
         services.AddScoped<IDownloadCandidateProvider>(serviceProvider =>
             serviceProvider.GetRequiredService<JackettCandidateProvider>());
+        services.AddScoped<IDownloadExecutionClient>(serviceProvider =>
+            serviceProvider.GetRequiredService<QBittorrentDownloadClient>());
 
         services.AddScoped<IBookRepository, BookRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IShelfRepository, ShelfRepository>();
         services.AddScoped<IDownloadJobRepository, DownloadJobRepository>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();

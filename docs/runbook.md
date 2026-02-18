@@ -1,4 +1,4 @@
-# BookShelf Phase 4 Runbook
+# BookShelf Phase 5 Runbook
 
 ## Prerequisites
 - .NET SDK 10.x
@@ -68,6 +68,17 @@ Environment keys supported by the server:
 - `JACKETT_MAX_RETRIES` (default `2`)
 - `JACKETT_RETRY_DELAY_MS` (default `300`)
 - `JACKETT_MAX_ITEMS` (default `50`)
+
+## qBittorrent Configuration
+Environment keys supported by the server:
+- `QBITTORRENT_BASE_URL` (default `http://192.168.40.25:8070`)
+- `QBITTORRENT_AUTH_MODE` (`none` in v1)
+- `QBITTORRENT_USERNAME` (used only for `session` auth mode)
+- `QBITTORRENT_PASSWORD` (used only for `session` auth mode)
+- `QBITTORRENT_TIMEOUT_SECONDS` (default `15`)
+- `QBITTORRENT_MAX_RETRIES` (default `2`)
+- `QBITTORRENT_RETRY_DELAY_MS` (default `300`)
+- `QBITTORRENT_NOT_FOUND_GRACE_SECONDS` (default `60`)
 
 ## Run API
 ```powershell
