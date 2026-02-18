@@ -307,6 +307,44 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("INVALID_ARGUMENT", payload!.Code);
     }
 
+    [Fact]
+    public async Task Library_WithoutToken_ReturnsUnauthorized()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/library");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Library_WithToken_ReturnsPayload()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ILibraryService>();
+                services.AddScoped<ILibraryService>(_ => new StubLibraryService());
+            });
+        });
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:12");
+
+        var response = await client.GetAsync(
+            "/api/v1/library?includeArchived=true&page=2&pageSize=5&query=dune&providerCode=fantlab&catalogState=library");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<LibraryResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(2, payload!.Page);
+        Assert.Equal(5, payload.PageSize);
+        Assert.Equal(1, payload.Total);
+        Assert.True(payload.IncludeArchived);
+        Assert.Single(payload.Items);
+    }
+
     private sealed class StubCandidateDiscoveryService : ICandidateDiscoveryService
     {
         public Task<DownloadCandidatesResponse> FindAsync(
@@ -448,6 +486,43 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         public Task SyncActiveAsync(CancellationToken cancellationToken = default)
         {
             throw _exception;
+        }
+    }
+
+    private sealed class StubLibraryService : ILibraryService
+    {
+        public Task<LibraryResponse> ListAsync(
+            long userId,
+            bool includeArchived,
+            string? query,
+            string? providerCode,
+            string? catalogState,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new LibraryResponse(
+                    Page: page,
+                    PageSize: pageSize,
+                    Total: 1,
+                    IncludeArchived: includeArchived,
+                    Items:
+                    [
+                        new LibraryBookDto(
+                            Id: 42,
+                            ProviderCode: "fantlab",
+                            ProviderBookKey: "123",
+                            Title: "Dune",
+                            OriginalTitle: "Dune",
+                            Description: "Sci-fi classic",
+                            PublishYear: 1965,
+                            LanguageCode: "en",
+                            CoverUrl: "https://images.example/dune.jpg",
+                            CatalogState: "library",
+                            CreatedAtUtc: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+                            UpdatedAtUtc: new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero)),
+                    ]));
         }
     }
 

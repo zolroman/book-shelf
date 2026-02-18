@@ -1,5 +1,6 @@
 using Bookshelf.Application.Abstractions.Persistence;
 using Bookshelf.Domain.Entities;
+using Bookshelf.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bookshelf.Infrastructure.Persistence.Repositories;
@@ -68,6 +69,37 @@ public sealed class BookRepository : IBookRepository
         await _dbContext.Series.AddAsync(series, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Book>> ListLibraryAsync(
+        bool includeArchived,
+        string? query,
+        string? providerCode,
+        CatalogState? catalogState,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safePageSize = pageSize is < 1 or > 100 ? 20 : pageSize;
+        var booksQuery = BuildLibraryQuery(includeArchived, query, providerCode, catalogState);
+
+        return await booksQuery
+            .OrderByDescending(x => x.UpdatedAtUtc)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<int> CountLibraryAsync(
+        bool includeArchived,
+        string? query,
+        string? providerCode,
+        CatalogState? catalogState,
+        CancellationToken cancellationToken = default)
+    {
+        return BuildLibraryQuery(includeArchived, query, providerCode, catalogState)
+            .CountAsync(cancellationToken);
+    }
+
     public async Task AddAsync(Book book, CancellationToken cancellationToken = default)
     {
         await _dbContext.Books.AddAsync(book, cancellationToken);
@@ -76,5 +108,41 @@ public sealed class BookRepository : IBookRepository
     public void Update(Book book)
     {
         _dbContext.Books.Update(book);
+    }
+
+    private IQueryable<Book> BuildLibraryQuery(
+        bool includeArchived,
+        string? query,
+        string? providerCode,
+        CatalogState? catalogState)
+    {
+        var booksQuery = _dbContext.Books.AsQueryable();
+
+        if (!includeArchived)
+        {
+            booksQuery = booksQuery.Where(x => x.CatalogState == CatalogState.Library);
+        }
+
+        if (catalogState.HasValue)
+        {
+            var stateValue = catalogState.Value;
+            booksQuery = booksQuery.Where(x => x.CatalogState == stateValue);
+        }
+
+        if (!string.IsNullOrWhiteSpace(providerCode))
+        {
+            var normalizedProviderCode = providerCode.Trim();
+            booksQuery = booksQuery.Where(x => x.ProviderCode == normalizedProviderCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var normalizedQuery = query.Trim().ToLowerInvariant();
+            booksQuery = booksQuery.Where(x =>
+                x.Title.ToLower().Contains(normalizedQuery) ||
+                (x.OriginalTitle != null && x.OriginalTitle.ToLower().Contains(normalizedQuery)));
+        }
+
+        return booksQuery;
     }
 }

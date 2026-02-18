@@ -327,6 +327,29 @@ public class DownloadJobServiceTests
             throw new NotSupportedException();
         }
 
+        public Task<IReadOnlyList<Book>> ListLibraryAsync(
+            bool includeArchived,
+            string? query,
+            string? providerCode,
+            CatalogState? catalogState,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<Book> items = Books.ToArray();
+            return Task.FromResult(items);
+        }
+
+        public Task<int> CountLibraryAsync(
+            bool includeArchived,
+            string? query,
+            string? providerCode,
+            CatalogState? catalogState,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Books.Count);
+        }
+
         public Task AddAsync(Book book, CancellationToken cancellationToken = default)
         {
             Books.Add(book);

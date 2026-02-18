@@ -13,7 +13,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 - `src/Bookshelf.App` - .NET MAUI Hybrid Blazor app.
 - `tests/*` - unit/integration test projects.
 
-## Phase 7 Shelves Baseline
+## Phase 7 Catalog Baseline
 - Health endpoint: `GET /health`
 - Ping endpoint: `GET /api/v1/system/ping`
 - Domain entities and invariants for catalog/media/shelves/history/download jobs
@@ -39,6 +39,8 @@ Requirements are defined in `requirements/` and are the source of truth.
 - Completion sync marks media as available and recomputes `Archive`/`Library` state
 - Shelf endpoints (`GET/POST /api/v1/shelves`, `POST/DELETE /api/v1/shelves/{id}/books`) are now DB-backed
 - Shelf uniqueness and duplicate-book constraints are enforced by service + API contract mapping
+- Added `GET /api/v1/library` with pagination, optional filters, and `includeArchived` toggle
+- Library endpoint is token-based: user context is resolved from bearer-token claims
 - CI pipeline: build + tests for backend/web/test projects
 - Coding standards: nullable enabled, analyzers enabled, warnings as errors
 

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Application.Abstractions.Services;
 using Bookshelf.Application.Exceptions;
 using Bookshelf.Api.Api.Errors;
@@ -20,6 +21,7 @@ public static class V1Endpoints
         search.MapGet("/{providerCode}/{providerBookKey}/candidates", GetCandidates);
 
         var library = v1.MapGroup("/library");
+        library.MapGet(string.Empty, GetLibrary).RequireAuthorization();
         library.MapPost("/add-and-download", AddAndDownload);
 
         var jobs = v1.MapGroup("/download-jobs");
@@ -233,6 +235,45 @@ public static class V1Endpoints
                 ApiErrorCodes.QBittorrentEnqueueFailed,
                 $"Download provider '{exception.ProviderCode}' failed to enqueue torrent.",
                 HttpStatusCode.BadGateway);
+        }
+    }
+
+    private static async Task<IResult> GetLibrary(
+        bool? includeArchived,
+        string? query,
+        string? providerCode,
+        string? catalogState,
+        int? page,
+        int? pageSize,
+        HttpContext httpContext,
+        ILibraryService libraryService,
+        CancellationToken cancellationToken)
+    {
+        var userId = EnsureUserIdFromClaims(httpContext.User);
+        var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
+        var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
+        var includeArchivedValue = includeArchived ?? false;
+
+        try
+        {
+            var response = await libraryService.ListAsync(
+                userId,
+                includeArchivedValue,
+                query,
+                providerCode,
+                catalogState,
+                safePage,
+                safePageSize,
+                cancellationToken);
+
+            return Results.Ok(response);
+        }
+        catch (ArgumentException)
+        {
+            throw new ApiException(
+                ApiErrorCodes.InvalidArgument,
+                "Invalid library filter argument.",
+                HttpStatusCode.BadRequest);
         }
     }
 
@@ -474,6 +515,23 @@ public static class V1Endpoints
         }
 
         return userId.Value;
+    }
+
+    private static long EnsureUserIdFromClaims(ClaimsPrincipal user)
+    {
+        var raw = user.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? user.FindFirstValue("userId")
+            ?? user.FindFirstValue("sub");
+
+        if (long.TryParse(raw, out var parsed) && parsed > 0)
+        {
+            return parsed;
+        }
+
+        throw new ApiException(
+            ApiErrorCodes.InvalidArgument,
+            "Authenticated user id claim is missing or invalid.",
+            HttpStatusCode.BadRequest);
     }
 
     private static string EnsureMediaType(string? mediaType)

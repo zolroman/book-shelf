@@ -85,6 +85,11 @@ Environment keys supported by the server:
 - qBittorrent `not found` is handled with grace period from `QBITTORRENT_NOT_FOUND_GRACE_SECONDS` (v1 default `60`).
 - On completed sync state, media is marked available and book catalog state is recomputed.
 
+## Library Endpoint Authentication
+- `GET /api/v1/library` requires bearer authentication.
+- Development token format: `Authorization: Bearer uid:{userId}` (for example `Bearer uid:1`).
+- `userId` is read from token claims and used as user context.
+
 ## Run API
 ```powershell
 dotnet run --project src/Bookshelf.Api/Bookshelf.Api.csproj

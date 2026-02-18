@@ -1,4 +1,5 @@
 using Bookshelf.Domain.Entities;
+using Bookshelf.Domain.Enums;
 
 namespace Bookshelf.Application.Abstractions.Persistence;
 
@@ -21,6 +22,22 @@ public interface IBookRepository
         CancellationToken cancellationToken = default);
 
     Task AddSeriesAsync(Series series, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Book>> ListLibraryAsync(
+        bool includeArchived,
+        string? query,
+        string? providerCode,
+        CatalogState? catalogState,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountLibraryAsync(
+        bool includeArchived,
+        string? query,
+        string? providerCode,
+        CatalogState? catalogState,
+        CancellationToken cancellationToken = default);
 
     Task AddAsync(Book book, CancellationToken cancellationToken = default);
 

@@ -18,7 +18,7 @@ This document defines HTTP API contracts for:
 
 ## 3. Authentication (v1)
 - Development mode: no auth required.
-- User context in v1: explicit `userId` in request payload/query.
+- User context
 - Production mode (future): token-based auth, `userId` from token claims.
 
 ## 4. Error Contract
@@ -106,7 +106,6 @@ Response item example:
 Request:
 ```json
 {
-  "userId": 1,
   "providerCode": "fantlab",
   "providerBookKey": "12345",
   "mediaType": "audio",
@@ -135,14 +134,14 @@ Response `200`:
 ```
 
 ## 5.5 List Download Jobs
-`GET /api/v1/download-jobs?userId={userId}&status={status?}&page={page}&pageSize={pageSize}`
+`GET /api/v1/download-jobs?status={status?}&page={page}&pageSize={pageSize}`
 
 Rules:
 - Returns jobs sorted by `createdAtUtc DESC`.
 - Before response, service may sync active jobs with qBittorrent.
 
 ## 5.6 Get Download Job
-`GET /api/v1/download-jobs/{jobId}?userId={userId}`
+`GET /api/v1/download-jobs/{jobId}`
 
 Rules:
 - Sync active status before returning.
@@ -150,19 +149,13 @@ Rules:
 ## 5.7 Cancel Download Job
 `POST /api/v1/download-jobs/{jobId}/cancel`
 
-Request:
-```json
-{
-  "userId": 1
-}
-```
 
 Rules:
 - Allowed only for `queued` or `downloading`.
 - Calls qBittorrent stop/delete with `deleteFiles=false`.
 
 ## 5.8 Get User Shelves
-`GET /api/v1/shelves?userId={userId}`
+`GET /api/v1/shelves`
 
 ## 5.9 Create Shelf
 `POST /api/v1/shelves`
@@ -170,7 +163,6 @@ Rules:
 Request:
 ```json
 {
-  "userId": 1,
   "name": "Sci-Fi"
 }
 ```
@@ -181,13 +173,12 @@ Request:
 Request:
 ```json
 {
-  "userId": 1,
   "bookId": 42
 }
 ```
 
 ## 5.11 Remove Book from Shelf
-`DELETE /api/v1/shelves/{shelfId}/books/{bookId}?userId={userId}`
+`DELETE /api/v1/shelves/{shelfId}/books/{bookId}`
 
 ## 6. Versioning and Compatibility
 - Breaking API changes require `/api/v2`.

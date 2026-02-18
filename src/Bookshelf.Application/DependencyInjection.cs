@@ -13,6 +13,7 @@ public static class DependencyInjection
         services.AddScoped<IAddAndDownloadService, AddAndDownloadService>();
         services.AddScoped<IDownloadJobService, DownloadJobService>();
         services.AddScoped<IShelfService, ShelfService>();
+        services.AddScoped<ILibraryService, LibraryService>();
         return services;
     }
 }

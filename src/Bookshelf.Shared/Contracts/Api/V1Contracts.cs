@@ -60,6 +60,27 @@ public sealed record DownloadCandidatesResponse(
     int Total,
     IReadOnlyList<DownloadCandidateDto> Items);
 
+public sealed record LibraryBookDto(
+    long Id,
+    string ProviderCode,
+    string ProviderBookKey,
+    string Title,
+    string? OriginalTitle,
+    string? Description,
+    int? PublishYear,
+    string? LanguageCode,
+    string? CoverUrl,
+    string CatalogState,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record LibraryResponse(
+    int Page,
+    int PageSize,
+    int Total,
+    bool IncludeArchived,
+    IReadOnlyList<LibraryBookDto> Items);
+
 public sealed record AddAndDownloadRequest(
     long UserId,
     string ProviderCode,
