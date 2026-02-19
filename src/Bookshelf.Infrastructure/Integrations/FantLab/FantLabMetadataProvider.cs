@@ -200,18 +200,44 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
     private MetadataSearchResult ParseSearchPayload(string payload)
     {
-        var envelope = JsonSerializer.Deserialize<FantLabSearchResponseContract>(payload, FantLabSearchJsonOptions)
-                       ?? throw new MetadataProviderUnavailableException(ProviderCode,
-                           "FantLab search payload does not contain an items array.");
+        FantLabSearchResponseContract? envelope;
+        try
+        {
+            envelope = JsonSerializer.Deserialize<FantLabSearchResponseContract>(payload, FantLabSearchJsonOptions);
+        }
+        catch (JsonException exception)
+        {
+            throw new MetadataProviderUnavailableException(
+                ProviderCode,
+                "FantLab search payload is not valid JSON for expected contracts.",
+                exception);
+        }
+
+        if (envelope is null)
+        {
+            throw new MetadataProviderUnavailableException(ProviderCode, "FantLab search payload does not contain an items array.");
+        }
+
+        var sourceItems = envelope.GetItems();
+        if (sourceItems.Count == 0)
+        {
+            throw new MetadataProviderUnavailableException(ProviderCode, "FantLab search payload does not contain an items array.");
+        }
 
         var items = new List<MetadataSearchItem>();
-        foreach (var source in envelope.Matches)
+        foreach (var source in sourceItems)
         {
-            var providerBookKey = source.WorkId?.ToString();
+            var providerBookKey = FirstNonEmpty(
+                source.WorkId?.ToString(),
+                source.Doc?.ToString(),
+                source.Id);
 
             var title = FirstNonEmpty(
                 source.RusName,
+                source.Title,
+                source.WorkName,
                 source.Name,
+                source.FullName,
                 source.AltName);
 
             title = NormalizeDisplayText(title);
@@ -221,12 +247,13 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
             }
 
             var authors = GetSearchAuthors(source);
+            var series = ParseSeries(source);
             
             items.Add(new MetadataSearchItem(
                 ProviderBookKey: providerBookKey,
                 Title: title,
                 Authors: authors,
-                Series: null));
+                Series: series));
         }
 
         if (items.Count == 0)
@@ -235,7 +262,7 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
                 "FantLab search payload did not include minimally valid items.");
         }
 
-        var total = envelope.Total;
+        var total = envelope.GetTotal() ?? sourceItems.Count;
         return new MetadataSearchResult(total, items);
     }
 
@@ -515,6 +542,21 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         var result = new List<string>();
         var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        foreach (var author in ExtractStringValues(node.Authors))
+        {
+            AddSingle(author);
+        }
+
+        foreach (var author in ExtractStringValues(node.Author))
+        {
+            AddSingle(author);
+        }
+
+        foreach (var author in ExtractStringValues(node.Writers))
+        {
+            AddSingle(author);
+        }
+
         AddMany(node.AllAutorRusName);
         AddMany(node.AllAutorName);
         AddSingle(node.AutorRusName);
@@ -557,6 +599,109 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         }
     }
 
+    private static MetadataSeriesInfo? ParseSeries(FantLabSearchItemContract node)
+    {
+        var series = ParseSeriesNode(node.Series);
+        if (series is not null)
+        {
+            return series;
+        }
+
+        series = ParseSeriesList(node.Serieses);
+        if (series is not null)
+        {
+            return series;
+        }
+
+        series = ParseSeriesList(node.SeriesList);
+        if (series is not null)
+        {
+            return series;
+        }
+
+        return ParseSeriesList(node.SeriesListCamel);
+    }
+
+    private static MetadataSeriesInfo? ParseSeriesList(JsonElement list)
+    {
+        if (list.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var item in list.EnumerateArray())
+        {
+            var parsed = ParseSeriesNode(item);
+            if (parsed is not null)
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static MetadataSeriesInfo? ParseSeriesNode(JsonElement node)
+    {
+        if (node.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var key = GetStringValue(node, "providerSeriesKey", "id", "series_id", "seriesId");
+        var title = GetStringValue(node, "title", "name");
+        var order = GetIntValue(node, "order", "series_order", "number");
+
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(title) || !order.HasValue || order.Value <= 0)
+        {
+            return null;
+        }
+
+        return new MetadataSeriesInfo(key, title, order.Value);
+    }
+
+    private static IEnumerable<string> ExtractStringValues(JsonElement element)
+    {
+        if (element.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            yield break;
+        }
+
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            var text = NormalizeDisplayText(element.GetString());
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                yield return text;
+            }
+
+            yield break;
+        }
+
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                foreach (var value in ExtractStringValues(item))
+                {
+                    yield return value;
+                }
+            }
+
+            yield break;
+        }
+
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var name = GetStringValue(element, "name", "fullName", "title", "rusname");
+            var normalized = NormalizeDisplayText(name);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                yield return normalized;
+            }
+        }
+    }
+
     private static string? FirstNonEmpty(params string?[] values)
     {
         foreach (var value in values)
@@ -574,17 +719,43 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
     private sealed class FantLabSearchResponseContract
     {
         [JsonPropertyName("total")]
-        public int Total { get; init; }
+        public int? Total { get; init; }
 
         [JsonPropertyName("total_found")]
-        public int TotalFound { get; init; }
+        public int? TotalFound { get; init; }
 
         [JsonPropertyName("matches")]
-        public List<FantLabSearchItemContract> Matches { get; init; } = [];
+        public List<FantLabSearchItemContract>? Matches { get; init; }
+
+        [JsonPropertyName("items")]
+        public List<FantLabSearchItemContract>? Items { get; init; }
+
+        public IReadOnlyList<FantLabSearchItemContract> GetItems()
+        {
+            if (Matches is { Count: > 0 })
+            {
+                return Matches;
+            }
+
+            if (Items is { Count: > 0 })
+            {
+                return Items;
+            }
+
+            return Array.Empty<FantLabSearchItemContract>();
+        }
+
+        public int? GetTotal()
+        {
+            return Total ?? TotalFound;
+        }
     }
 
     private sealed class FantLabSearchItemContract
     {
+        [JsonPropertyName("id")]
+        public string? Id { get; init; }
+
         [JsonPropertyName("work_id")]
         public long? WorkId { get; init; }
 
@@ -647,6 +818,12 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
         [JsonPropertyName("rusname")]
         public string? RusName { get; init; }
+
+        [JsonPropertyName("title")]
+        public string? Title { get; init; }
+
+        [JsonPropertyName("work_name")]
+        public string? WorkName { get; init; }
 
         [JsonPropertyName("fullname")]
         public string? FullName { get; init; }
@@ -734,6 +911,27 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
         [JsonPropertyName("autor5_name")]
         public string? Autor5Name { get; init; }
+
+        [JsonPropertyName("authors")]
+        public JsonElement Authors { get; init; }
+
+        [JsonPropertyName("author")]
+        public JsonElement Author { get; init; }
+
+        [JsonPropertyName("writers")]
+        public JsonElement Writers { get; init; }
+
+        [JsonPropertyName("series")]
+        public JsonElement Series { get; init; }
+
+        [JsonPropertyName("serieses")]
+        public JsonElement Serieses { get; init; }
+
+        [JsonPropertyName("series_list")]
+        public JsonElement SeriesList { get; init; }
+
+        [JsonPropertyName("seriesList")]
+        public JsonElement SeriesListCamel { get; init; }
     }
 
     private static string? NormalizeDisplayText(string? value)

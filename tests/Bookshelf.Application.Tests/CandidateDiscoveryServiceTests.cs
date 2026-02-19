@@ -82,6 +82,35 @@ public class CandidateDiscoveryServiceTests
         Assert.Equal("Dune audiobook compact", item.Title);
     }
 
+    [Fact]
+    public async Task FindAsync_UsesUniqueIdentifier_ForDedupAndCandidateId()
+    {
+        var service = CreateService(
+            new[]
+            {
+                Candidate(
+                    "Dune audiobook first",
+                    "magnet:?xt=urn:btih:same",
+                    "https://details/same",
+                    10,
+                    700L * 1024 * 1024,
+                    uniqueIdentifier: "guid:first"),
+                Candidate(
+                    "Dune audiobook second",
+                    "magnet:?xt=urn:btih:same",
+                    "https://details/same",
+                    9,
+                    700L * 1024 * 1024,
+                    uniqueIdentifier: "guid:second"),
+            });
+
+        var response = await service.FindAsync("fantlab", "123", "audio", 1, 20);
+
+        Assert.Equal(2, response.Total);
+        Assert.Contains(response.Items, x => x.CandidateId == "guid:first");
+        Assert.Contains(response.Items, x => x.CandidateId == "guid:second");
+    }
+
     private static ICandidateDiscoveryService CreateService(IReadOnlyList<DownloadCandidateRaw> candidates)
     {
         var bookSearchService = new FakeBookSearchService(
@@ -106,7 +135,8 @@ public class CandidateDiscoveryServiceTests
         string sourceUrl,
         int? seeders = null,
         long? sizeBytes = null,
-        DateTimeOffset? publishedAtUtc = null)
+        DateTimeOffset? publishedAtUtc = null,
+        string? uniqueIdentifier = null)
     {
         return new DownloadCandidateRaw(
             title,
@@ -114,7 +144,8 @@ public class CandidateDiscoveryServiceTests
             sourceUrl,
             seeders,
             sizeBytes,
-            publishedAtUtc);
+            publishedAtUtc,
+            uniqueIdentifier ?? $"{downloadUri}|{sourceUrl}");
     }
 
     private sealed class FakeCandidateProvider : IDownloadCandidateProvider

@@ -1,7 +1,8 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net;
-using System.Xml.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Exceptions;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,11 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
     private static readonly Counter<long> RequestCounter = Meter.CreateCounter<long>("jackett_requests_total");
     private static readonly Counter<long> FailureCounter = Meter.CreateCounter<long>("jackett_failures_total");
     private static readonly Histogram<double> LatencyHistogram = Meter.CreateHistogram<double>("jackett_request_duration_ms");
+    private static readonly JsonSerializerOptions JackettJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+    };
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<JackettCandidateProvider> _logger;
@@ -129,33 +135,33 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
             lastException);
     }
 
-    private IReadOnlyList<DownloadCandidateRaw> ParsePayload(string xmlPayload)
+    private IReadOnlyList<DownloadCandidateRaw> ParsePayload(string jsonPayload)
     {
-        XDocument document;
+        JackettSearchResponseContract? payload;
         try
         {
-            document = XDocument.Parse(xmlPayload);
+            payload = JsonSerializer.Deserialize<JackettSearchResponseContract>(jsonPayload, JackettJsonOptions);
         }
-        catch (Exception exception)
+        catch (JsonException exception)
         {
-            throw new DownloadCandidateProviderUnavailableException(ProviderCode, "Jackett response is not valid XML.", exception);
+            throw new DownloadCandidateProviderUnavailableException(ProviderCode, "Jackett response is not valid JSON.", exception);
+        }
+
+        if (payload?.Results is null || payload.Results.Count == 0)
+        {
+            return Array.Empty<DownloadCandidateRaw>();
         }
 
         var candidates = new List<DownloadCandidateRaw>();
-        var items = document.Descendants().Where(x => x.Name.LocalName.Equals("item", StringComparison.OrdinalIgnoreCase));
-        foreach (var item in items)
-        {
-            var title = item.Elements().FirstOrDefault(x => x.Name.LocalName.Equals("title", StringComparison.OrdinalIgnoreCase))?.Value?.Trim();
-            var link = item.Elements().FirstOrDefault(x => x.Name.LocalName.Equals("link", StringComparison.OrdinalIgnoreCase))?.Value?.Trim();
-            var guid = item.Elements().FirstOrDefault(x => x.Name.LocalName.Equals("guid", StringComparison.OrdinalIgnoreCase))?.Value?.Trim();
-            var pubDateRaw = item.Elements().FirstOrDefault(x => x.Name.LocalName.Equals("pubDate", StringComparison.OrdinalIgnoreCase))?.Value?.Trim();
-            var sizeRaw = item.Elements().FirstOrDefault(x => x.Name.LocalName.Equals("size", StringComparison.OrdinalIgnoreCase))?.Value?.Trim();
+        var seenIdentifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            var attributes = item.Descendants().Where(x => x.Name.LocalName.Equals("attr", StringComparison.OrdinalIgnoreCase)).ToArray();
-            var magnetUrl = GetAttributeValue(attributes, "magneturl");
-            var detailsUrl = GetAttributeValue(attributes, "details");
-            var seedersRaw = GetAttributeValue(attributes, "seeders");
-            sizeRaw ??= GetAttributeValue(attributes, "size");
+        foreach (var item in payload.Results)
+        {
+            var title = NormalizeText(item.Title);
+            var guid = NormalizeText(item.Guid);
+            var magnetUrl = NormalizeText(item.MagnetUri);
+            var link = NormalizeText(item.Link);
+            var detailsUrl = NormalizeText(item.Details);
 
             var downloadUri = !string.IsNullOrWhiteSpace(magnetUrl) ? magnetUrl : link;
             var sourceUrl = !string.IsNullOrWhiteSpace(detailsUrl) ? detailsUrl : guid;
@@ -165,17 +171,22 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
                 continue;
             }
 
-            var seeders = int.TryParse(seedersRaw, out var parsedSeeders) ? parsedSeeders : (int?)null;
-            var sizeBytes = long.TryParse(sizeRaw, out var parsedSize) ? parsedSize : (long?)null;
-            var publishedAt = DateTimeOffset.TryParse(pubDateRaw, out var parsedDate) ? parsedDate : (DateTimeOffset?)null;
+            var uniqueIdentifier = !string.IsNullOrWhiteSpace(guid)
+                ? guid
+                : $"{downloadUri}|{sourceUrl}";
+            if (!seenIdentifiers.Add(uniqueIdentifier))
+            {
+                continue;
+            }
 
             candidates.Add(new DownloadCandidateRaw(
                 Title: title,
                 DownloadUri: downloadUri.Trim(),
                 SourceUrl: string.IsNullOrWhiteSpace(sourceUrl) ? downloadUri.Trim() : sourceUrl.Trim(),
-                Seeders: seeders,
-                SizeBytes: sizeBytes,
-                PublishedAtUtc: publishedAt?.ToUniversalTime()));
+                Seeders: item.Seeders,
+                SizeBytes: item.Size,
+                PublishedAtUtc: item.PublishDate?.ToUniversalTime(),
+                UniqueIdentifier: uniqueIdentifier));
         }
 
         return candidates;
@@ -186,10 +197,7 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
         var normalizedQuery = string.Join(' ', query.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
         var encodedQuery = Uri.EscapeDataString(normalizedQuery);
         var encodedApiKey = Uri.EscapeDataString(_options.ApiKey);
-        var encodedIndexer = Uri.EscapeDataString(_options.Indexer);
-
-        var relative =
-            $"/api/v2.0/indexers/{encodedIndexer}/results/torznab/api?apikey={encodedApiKey}&t=search&q={encodedQuery}";
+        var relative = $"/api/v2.0/indexers/all/results?apikey={encodedApiKey}&Query={encodedQuery}";
         return new Uri(relative, UriKind.Relative);
     }
 
@@ -229,19 +237,41 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
             .Replace(encodedApiKey, "***", StringComparison.Ordinal);
     }
 
-    private static string? GetAttributeValue(IEnumerable<XElement> attributes, string targetName)
+    private static string? NormalizeText(string? value)
     {
-        foreach (var attribute in attributes)
-        {
-            var name = attribute.Attribute("name")?.Value;
-            if (!string.Equals(name, targetName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 
-            return attribute.Attribute("value")?.Value;
-        }
+    private sealed class JackettSearchResponseContract
+    {
+        [JsonPropertyName("Results")]
+        public List<JackettResultContract>? Results { get; init; }
+    }
 
-        return null;
+    private sealed class JackettResultContract
+    {
+        [JsonPropertyName("Title")]
+        public string? Title { get; init; }
+
+        [JsonPropertyName("Guid")]
+        public string? Guid { get; init; }
+
+        [JsonPropertyName("Link")]
+        public string? Link { get; init; }
+
+        [JsonPropertyName("Details")]
+        public string? Details { get; init; }
+
+        [JsonPropertyName("MagnetUri")]
+        public string? MagnetUri { get; init; }
+
+        [JsonPropertyName("Seeders")]
+        public int? Seeders { get; init; }
+
+        [JsonPropertyName("Size")]
+        public long? Size { get; init; }
+
+        [JsonPropertyName("PublishDate")]
+        public DateTimeOffset? PublishDate { get; init; }
     }
 }

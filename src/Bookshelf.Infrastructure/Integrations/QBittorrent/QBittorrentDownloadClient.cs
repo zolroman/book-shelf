@@ -46,15 +46,12 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
 
         using var response = await SendWithRetryAsync(
             operation: "enqueue",
-            requestFactory: () =>
+            requestFactory: () => new HttpRequestMessage(HttpMethod.Post, "/api/v2/torrents/add")
             {
-                return new HttpRequestMessage(HttpMethod.Post, "/api/v2/torrents/add")
-                {
-                    Content = new FormUrlEncodedContent(
-                    [
-                        new KeyValuePair<string, string>("urls", downloadUri.Trim()),
-                    ]),
-                };
+                Content = new FormUrlEncodedContent(
+                [
+                    new KeyValuePair<string, string>("urls", downloadUri.Trim()),
+                ]),
             },
             cancellationToken);
 

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Abstractions.Services;
 using Bookshelf.Shared.Contracts.Api;
@@ -59,7 +57,7 @@ public sealed class CandidateDiscoveryService : ICandidateDiscoveryService
             var candidates = await provider.SearchAsync(query, maxItems: int.MaxValue, cancellationToken);
             foreach (var candidate in candidates)
             {
-                var dedupKey = $"{candidate.DownloadUri}|{candidate.SourceUrl}";
+                var dedupKey = BuildCandidateId(candidate);
                 if (!seenKeys.Add(dedupKey))
                 {
                     continue;
@@ -243,10 +241,13 @@ public sealed class CandidateDiscoveryService : ICandidateDiscoveryService
 
     private static string BuildCandidateId(DownloadCandidateRaw candidate)
     {
-        var value = $"{candidate.DownloadUri}|{candidate.SourceUrl}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
-        var hash = Convert.ToHexString(bytes)[..12].ToLowerInvariant();
-        return $"jackett:{hash}";
+        var uniqueIdentifier = candidate.UniqueIdentifier?.Trim();
+        if (!string.IsNullOrWhiteSpace(uniqueIdentifier))
+        {
+            return uniqueIdentifier;
+        }
+
+        return $"{candidate.DownloadUri}|{candidate.SourceUrl}";
     }
 
     private static string NormalizeQueryTerm(string value)

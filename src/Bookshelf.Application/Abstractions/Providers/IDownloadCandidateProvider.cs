@@ -16,4 +16,5 @@ public sealed record DownloadCandidateRaw(
     string SourceUrl,
     int? Seeders,
     long? SizeBytes,
-    DateTimeOffset? PublishedAtUtc);
+    DateTimeOffset? PublishedAtUtc,
+    string UniqueIdentifier = "");

@@ -17,34 +17,41 @@ public class JackettCandidateProviderTests
             {
                 Content = new StringContent(
                     """
-                    <rss>
-                      <channel>
-                        <item>
-                          <title>Dune audiobook m4b</title>
-                          <link>https://tracker.example/download/1</link>
-                          <guid>https://tracker.example/guid/1</guid>
-                          <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
-                          <attr name="magneturl" value="magnet:?xt=urn:btih:ABC123" />
-                          <attr name="details" value="https://tracker.example/details/1" />
-                          <attr name="seeders" value="52" />
-                          <attr name="size" value="734003200" />
-                        </item>
-                        <item>
-                          <title>Dune epub</title>
-                          <link>https://tracker.example/download/2</link>
-                          <guid>https://tracker.example/guid/2</guid>
-                          <attr name="seeders" value="21" />
-                        </item>
-                        <item>
-                          <link>https://tracker.example/download/3</link>
-                          <guid>https://tracker.example/guid/3</guid>
-                          <attr name="details" value="https://tracker.example/details/3" />
-                        </item>
-                      </channel>
-                    </rss>
+                    {
+                      "Results": [
+                        {
+                          "Title": "Dune audiobook m4b",
+                          "Guid": "https://tracker.example/guid/1",
+                          "Link": "https://tracker.example/download/1",
+                          "Details": "https://tracker.example/details/1",
+                          "MagnetUri": "magnet:?xt=urn:btih:ABC123",
+                          "Seeders": 52,
+                          "Size": 734003200,
+                          "PublishDate": "2024-01-01T00:00:00Z"
+                        },
+                        {
+                          "Title": "Dune audiobook m4b duplicate",
+                          "Guid": "https://tracker.example/guid/1",
+                          "Link": "https://tracker.example/download/1b",
+                          "Details": "https://tracker.example/details/1b",
+                          "Seeders": 40
+                        },
+                        {
+                          "Title": "Dune epub",
+                          "Guid": "https://tracker.example/guid/2",
+                          "Link": "https://tracker.example/download/2",
+                          "Seeders": 21
+                        },
+                        {
+                          "Link": "https://tracker.example/download/3",
+                          "Guid": "https://tracker.example/guid/3",
+                          "Details": "https://tracker.example/details/3"
+                        }
+                      ]
+                    }
                     """,
                     Encoding.UTF8,
-                    "application/xml")
+                    "application/json")
             });
 
         var provider = CreateProvider(handler, options =>
@@ -58,7 +65,7 @@ public class JackettCandidateProviderTests
         var response = await provider.SearchAsync(" Dune   Herbert ", 50);
 
         Assert.Equal(
-            "/api/v2.0/indexers/all/results/torznab/api?apikey=test-key&t=search&q=Dune%20Herbert",
+            "/api/v2.0/indexers/all/results?apikey=test-key&Query=Dune%20Herbert",
             Assert.Single(handler.Requests));
         Assert.Equal(2, response.Count);
 
@@ -66,6 +73,7 @@ public class JackettCandidateProviderTests
         Assert.Equal("Dune audiobook m4b", first.Title);
         Assert.Equal("magnet:?xt=urn:btih:ABC123", first.DownloadUri);
         Assert.Equal("https://tracker.example/details/1", first.SourceUrl);
+        Assert.Equal("https://tracker.example/guid/1", first.UniqueIdentifier);
         Assert.Equal(52, first.Seeders);
         Assert.Equal(734003200, first.SizeBytes);
 
@@ -73,6 +81,7 @@ public class JackettCandidateProviderTests
         Assert.Equal("Dune epub", second.Title);
         Assert.Equal("https://tracker.example/download/2", second.DownloadUri);
         Assert.Equal("https://tracker.example/guid/2", second.SourceUrl);
+        Assert.Equal("https://tracker.example/guid/2", second.UniqueIdentifier);
     }
 
     [Fact]
@@ -84,19 +93,19 @@ public class JackettCandidateProviderTests
             {
                 Content = new StringContent(
                     """
-                    <rss>
-                      <channel>
-                        <item>
-                          <title>Dune audiobook</title>
-                          <link>https://tracker.example/download/1</link>
-                          <guid>https://tracker.example/guid/1</guid>
-                          <attr name="details" value="https://tracker.example/details/1" />
-                        </item>
-                      </channel>
-                    </rss>
+                    {
+                      "Results": [
+                        {
+                          "Title": "Dune audiobook",
+                          "Guid": "https://tracker.example/guid/1",
+                          "Link": "https://tracker.example/download/1",
+                          "Details": "https://tracker.example/details/1"
+                        }
+                      ]
+                    }
                     """,
                     Encoding.UTF8,
-                    "application/xml")
+                    "application/json")
             });
 
         var provider = CreateProvider(handler, options =>
@@ -119,7 +128,7 @@ public class JackettCandidateProviderTests
         var handler = new SequenceHttpHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("<rss><channel /></rss>", Encoding.UTF8, "application/xml")
+                Content = new StringContent("""{"Results":[]}""", Encoding.UTF8, "application/json")
             });
 
         var provider = CreateProvider(handler, options =>
@@ -180,7 +189,7 @@ public class JackettCandidateProviderTests
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("<rss><channel /></rss>", Encoding.UTF8, "application/xml"),
+                    Content = new StringContent("""{"Results":[]}""", Encoding.UTF8, "application/json"),
                 });
             }
 
