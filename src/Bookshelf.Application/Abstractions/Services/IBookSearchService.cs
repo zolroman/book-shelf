@@ -8,7 +8,6 @@ public interface IBookSearchService
         string? title,
         string? author,
         int page,
-        int pageSize,
         CancellationToken cancellationToken = default);
 
     Task<SearchBookDetailsResponse?> GetDetailsAsync(

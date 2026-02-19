@@ -26,7 +26,6 @@ public sealed class BookSearchService : IBookSearchService
         string? title,
         string? author,
         int page,
-        int pageSize,
         CancellationToken cancellationToken = default)
     {
         var provider = GetProvider(FantLabProviderCode);
@@ -34,14 +33,12 @@ public sealed class BookSearchService : IBookSearchService
         var normalizedTitle = NormalizeOptional(title);
         var normalizedAuthor = NormalizeOptional(author);
         var safePage = page < 1 ? 1 : page;
-        var safePageSize = pageSize is < 1 or > 100 ? 20 : pageSize;
 
         var providerResult = await provider.SearchAsync(
             new MetadataSearchRequest(
                 Title: normalizedTitle,
                 Author: normalizedAuthor,
-                Page: safePage,
-                PageSize: safePageSize),
+                Page: safePage),
             cancellationToken);
 
         var mappedItems = new List<SearchBookItemDto>(providerResult.Items.Count);
@@ -75,7 +72,7 @@ public sealed class BookSearchService : IBookSearchService
         return new SearchBooksResponse(
             Query: new SearchBooksQuery(Title: normalizedTitle, Author: normalizedAuthor),
             Page: safePage,
-            PageSize: safePageSize,
+            PageSize: 25,
             Total: providerResult.Total,
             Items: mappedItems);
     }

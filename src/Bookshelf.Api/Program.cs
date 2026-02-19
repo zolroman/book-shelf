@@ -86,6 +86,8 @@ app.MapGet("/api/v1/system/ping", () =>
 
 app.Run();
 
+// public partial class Program;
+
 static void ConfigureRateLimiting(IServiceCollection services, IConfiguration configuration)
 {
     var permitLimit = configuration.GetValue<int?>("API_RATE_LIMIT_PERMIT_LIMIT")
@@ -100,17 +102,6 @@ static void ConfigureRateLimiting(IServiceCollection services, IConfiguration co
 
     services.AddRateLimiter(options =>
     {
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-        {
-            if (context.Request.Path.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase)
-                || context.Request.Path.StartsWithSegments("/api/v1/system/ping", StringComparison.OrdinalIgnoreCase))
-            {
-                return RateLimitPartition.GetNoLimiter("health");
-            }
-
-            return CreatePartition(context);
-        });
-
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         options.OnRejected = async (context, cancellationToken) =>
         {
@@ -132,13 +123,9 @@ static void ConfigureRateLimiting(IServiceCollection services, IConfiguration co
 
         options.AddPolicy("api-v1", context =>
         {
-            return CreatePartition(context);
-        });
-
-        RateLimitPartition<string> CreatePartition(HttpContext context)
-        {
             var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var partitionKey = !string.IsNullOrWhiteSpace(userId) ? $"user:{userId}" : "anonymous";
+            var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var partitionKey = !string.IsNullOrWhiteSpace(userId) ? $"user:{userId}" : $"ip:{ipAddress}";
 
             return RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey,
@@ -149,7 +136,7 @@ static void ConfigureRateLimiting(IServiceCollection services, IConfiguration co
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                     QueueLimit = Math.Max(0, queueLimit),
                 });
-        }
+        });
     });
 }
 
@@ -204,5 +191,3 @@ static void ConfigureOpenTelemetry(
             }
         });
 }
-
-public partial class Program;

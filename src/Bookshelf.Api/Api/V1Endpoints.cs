@@ -51,7 +51,6 @@ public static class V1Endpoints
         string? title,
         string? author,
         int? page,
-        int? pageSize,
         IBookSearchService searchService,
         CancellationToken cancellationToken)
     {
@@ -64,7 +63,6 @@ public static class V1Endpoints
         }
 
         var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
-        var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
 
         try
         {
@@ -72,7 +70,6 @@ public static class V1Endpoints
                 title,
                 author,
                 safePage,
-                safePageSize,
                 cancellationToken);
 
             return Results.Ok(response);

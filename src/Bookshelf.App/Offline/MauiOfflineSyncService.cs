@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Bookshelf.Offline;
 
-public sealed class MauiOfflineSyncService : IOfflineSyncService, IDisposable
+public sealed partial class MauiOfflineSyncService : IOfflineSyncService, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

@@ -38,14 +38,12 @@ public class BookSearchServiceTests
         var response = await service.SearchAsync(
             title: "  dune   saga  ",
             author: "  frank   herbert ",
-            page: 0,
-            pageSize: 999);
+            page: 0);
 
         Assert.NotNull(provider.LastSearchRequest);
         Assert.Equal("dune saga", provider.LastSearchRequest!.Title);
         Assert.Equal("frank herbert", provider.LastSearchRequest.Author);
         Assert.Equal(1, provider.LastSearchRequest.Page);
-        Assert.Equal(20, provider.LastSearchRequest.PageSize);
 
         Assert.Equal("dune saga", response.Query.Title);
         Assert.Equal("frank herbert", response.Query.Author);
@@ -70,7 +68,7 @@ public class BookSearchServiceTests
         var service = new BookSearchService([new FakeMetadataProvider("other")], new FakeBookRepository());
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await service.SearchAsync("dune", null, 1, 20));
+            async () => await service.SearchAsync("dune", null, 1));
     }
 
     [Fact]

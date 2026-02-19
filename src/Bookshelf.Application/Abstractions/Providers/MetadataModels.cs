@@ -3,8 +3,7 @@ namespace Bookshelf.Application.Abstractions.Providers;
 public sealed record MetadataSearchRequest(
     string? Title,
     string? Author,
-    int Page,
-    int PageSize);
+    int Page);
 
 public sealed record MetadataSeriesInfo(
     string ProviderSeriesKey,

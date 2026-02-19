@@ -42,7 +42,7 @@ public class FantLabMetadataProviderTests
         });
 
         var result = await provider.SearchAsync(
-            new MetadataSearchRequest("  Dune   Messiah ", " Frank   Herbert ", 1, 20));
+            new MetadataSearchRequest("  Dune   Messiah ", " Frank   Herbert ", 1));
 
         Assert.Equal(1, result.Total);
         var item = Assert.Single(result.Items);
@@ -51,7 +51,60 @@ public class FantLabMetadataProviderTests
         Assert.Equal("Frank Herbert", Assert.Single(item.Authors));
         Assert.NotNull(item.Series);
         Assert.Equal("777", item.Series!.ProviderSeriesKey);
-        Assert.Equal("/api/search?title=Dune%20Messiah&author=Frank%20Herbert&page=1&pageSize=20", handler.Requests.Single());
+        Assert.Equal("/api/search?q=Dune%20Messiah&author=Frank%20Herbert&page=1&onlymatches=1", handler.Requests.Single());
+    }
+
+    [Fact]
+    public async Task SearchAsync_ParsesFantLabArrayPayloadShape()
+    {
+        var handler = new SequenceHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    [
+                      {
+                        "all_autor_rusname": "Вадим Панов",
+                        "autor1_rusname": "Вадим Панов",
+                        "fullname": " Московский клуб   ",
+                        "rusname": "Московский клуб",
+                        "work_id": 4333,
+                        "year": 2005
+                      },
+                      {
+                        "all_autor_rusname": "",
+                        "fullname": " Московский фан-клуб \"Звездных войн\" объявляет конкурс фан-арта по тематике ЗВ   ",
+                        "rusname": "Московский фан-клуб \"Звездных войн\" объявляет конкурс фан-арта по тематике ЗВ",
+                        "work_id": 1000609,
+                        "year": 0
+                      }
+                    ]
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            });
+
+        var provider = CreateProvider(handler, options =>
+        {
+            options.BaseUrl = "http://fantlab.test";
+            options.SearchPath = "/api/search";
+        });
+
+        var result = await provider.SearchAsync(
+            new MetadataSearchRequest("Московский клуб", null, 1));
+
+        Assert.Equal(2, result.Total);
+        Assert.Equal(2, result.Items.Count);
+
+        var first = result.Items[0];
+        Assert.Equal("4333", first.ProviderBookKey);
+        Assert.Equal("Московский клуб", first.Title);
+        Assert.Equal("Вадим Панов", Assert.Single(first.Authors));
+
+        var second = result.Items[1];
+        Assert.Equal("1000609", second.ProviderBookKey);
+        Assert.Equal("Московский фан-клуб \"Звездных войн\" объявляет конкурс фан-арта по тематике ЗВ", second.Title);
+        Assert.Empty(second.Authors);
     }
 
     [Fact]
@@ -81,7 +134,7 @@ public class FantLabMetadataProviderTests
             options.RetryDelayMs = 1;
         });
 
-        var result = await provider.SearchAsync(new MetadataSearchRequest("Hyperion", null, 1, 20));
+        var result = await provider.SearchAsync(new MetadataSearchRequest("Hyperion", null, 1));
 
         Assert.Single(result.Items);
         Assert.Equal(2, handler.Requests.Count);
@@ -158,10 +211,10 @@ public class FantLabMetadataProviderTests
         });
 
         await Assert.ThrowsAsync<MetadataProviderUnavailableException>(
-            async () => await provider.SearchAsync(new MetadataSearchRequest("Book", null, 1, 20)));
+            async () => await provider.SearchAsync(new MetadataSearchRequest("Book", null, 1)));
 
         await Assert.ThrowsAsync<MetadataProviderUnavailableException>(
-            async () => await provider.SearchAsync(new MetadataSearchRequest("Book", null, 1, 20)));
+            async () => await provider.SearchAsync(new MetadataSearchRequest("Book", null, 1)));
 
         Assert.Single(handler.Requests);
     }

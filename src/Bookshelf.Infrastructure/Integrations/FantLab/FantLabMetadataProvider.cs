@@ -48,7 +48,7 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
     {
         var normalizedTitle = NormalizeQueryTerm(request.Title);
         var normalizedAuthor = NormalizeQueryTerm(request.Author);
-        var cacheKey = $"fantlab:search:{normalizedTitle}:{normalizedAuthor}:page:{request.Page}:size:{request.PageSize}";
+        var cacheKey = $"fantlab:search:{normalizedTitle}:{normalizedAuthor}:page:{request.Page}";
 
         if (_options.CacheEnabled && _memoryCache.TryGetValue(cacheKey, out MetadataSearchResult? cachedResult))
         {
@@ -62,7 +62,7 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
                 "FantLab circuit is open and cache does not contain requested search data.");
         }
 
-        var uri = BuildSearchUri(normalizedTitle, normalizedAuthor, request.Page, request.PageSize);
+        var uri = BuildSearchUri(normalizedTitle, normalizedAuthor, request.Page);
         var payload = await SendWithRetryAsync(uri, RequestTypeSearch, cancellationToken);
         var parsed = ParseSearchPayload(payload);
 
@@ -207,13 +207,14 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         foreach (var element in itemsNode.EnumerateArray())
         {
             var providerBookKey = GetStringValue(element, "providerBookKey", "bookId", "work_id", "workId", "id");
-            var title = GetStringValue(element, "title", "name", "work_name", "workName");
+            var title = GetStringValue(element, "rusname", "title", "work_name", "workName", "fullname", "name", "altname");
+            title = NormalizeDisplayText(title);
             if (string.IsNullOrWhiteSpace(providerBookKey) || string.IsNullOrWhiteSpace(title))
             {
                 continue;
             }
 
-            var authors = GetStringList(element, "authors", "author", "writers");
+            var authors = GetSearchAuthors(element);
             var series = ParseSeries(element);
             items.Add(new MetadataSearchItem(
                 ProviderBookKey: providerBookKey,
@@ -227,7 +228,7 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
             throw new MetadataProviderUnavailableException(ProviderCode, "FantLab search payload did not include minimally valid items.");
         }
 
-        var total = GetIntValue(root, "total", "count") ?? items.Count;
+        var total = GetIntValue(root, "total", "count") ?? itemsNode.GetArrayLength();
         return new MetadataSearchResult(total, items);
     }
 
@@ -299,12 +300,12 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         return null;
     }
 
-    private Uri BuildSearchUri(string? title, string? author, int page, int pageSize)
+    private Uri BuildSearchUri(string? title, string? author, int page)
     {
         var queryParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(title))
         {
-            queryParts.Add($"title={Uri.EscapeDataString(title)}");
+            queryParts.Add($"q={Uri.EscapeDataString(title)}");
         }
 
         if (!string.IsNullOrWhiteSpace(author))
@@ -313,7 +314,7 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         }
 
         queryParts.Add($"page={page}");
-        queryParts.Add($"pageSize={pageSize}");
+        queryParts.Add("onlymatches=1");
 
         var path = _options.SearchPath.StartsWith('/') ? _options.SearchPath : $"/{_options.SearchPath}";
         var query = string.Join("&", queryParts);
@@ -513,5 +514,61 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         }
 
         return values;
+    }
+
+    private static IReadOnlyList<string> GetSearchAuthors(JsonElement node)
+    {
+        var result = new List<string>();
+        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddSingle(string? rawValue)
+        {
+            var normalized = NormalizeDisplayText(rawValue);
+            if (string.IsNullOrWhiteSpace(normalized) || !unique.Add(normalized))
+            {
+                return;
+            }
+
+            result.Add(normalized);
+        }
+
+        void AddMany(string? rawValue)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return;
+            }
+
+            foreach (var candidate in rawValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
+            {
+                AddSingle(candidate);
+            }
+        }
+
+        foreach (var author in GetStringList(node, "authors", "author", "writers"))
+        {
+            AddSingle(author);
+        }
+
+        AddMany(GetStringValue(node, "all_autor_rusname", "all_autor_name"));
+        AddSingle(GetStringValue(node, "autor_rusname", "autor_name"));
+
+        for (var index = 1; index <= 5; index++)
+        {
+            AddSingle(GetStringValue(node, $"autor{index}_rusname", $"autor{index}_name"));
+        }
+
+        return result;
+    }
+
+    private static string? NormalizeDisplayText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = string.Join(' ', value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 }

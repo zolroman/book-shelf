@@ -31,12 +31,9 @@ public static class MauiProgram
             options.BaseUrl = apiBaseUrl;
         });
 
-        builder.Services.AddSingleton(serviceProvider =>
+        builder.Services.AddSingleton(_ => new HttpClient
         {
-            return new HttpClient
-            {
-                BaseAddress = new Uri(apiBaseUrl, UriKind.Absolute),
-            };
+            BaseAddress = new Uri(apiBaseUrl, UriKind.Absolute),
         });
 
         var offlineDbPath = Path.Combine(FileSystem.Current.AppDataDirectory, "bookshelf-offline.db");

@@ -10,7 +10,7 @@ public class ApplicationContractsAndExceptionsTests
     [Fact]
     public void MetadataModels_PreserveConstructorValues()
     {
-        var request = new MetadataSearchRequest("dune", "herbert", 2, 30);
+        var request = new MetadataSearchRequest("dune", "herbert", 2);
         var series = new MetadataSeriesInfo("77", "Dune Saga", 1);
         var item = new MetadataSearchItem("123", "Dune", ["Frank Herbert"], series);
         var result = new MetadataSearchResult(1, [item]);
@@ -27,7 +27,6 @@ public class ApplicationContractsAndExceptionsTests
         Assert.Equal("dune", request.Title);
         Assert.Equal("herbert", request.Author);
         Assert.Equal(2, request.Page);
-        Assert.Equal(30, request.PageSize);
         Assert.Equal("77", item.Series!.ProviderSeriesKey);
         Assert.Equal(1, result.Total);
         Assert.Single(result.Items);

@@ -151,14 +151,13 @@ public class CandidateDiscoveryServiceTests
             string? title,
             string? author,
             int page,
-            int pageSize,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(
                 new SearchBooksResponse(
                     new SearchBooksQuery(title, author),
                     page,
-                    pageSize,
+                    25,
                     0,
                     Array.Empty<SearchBookItemDto>()));
         }
