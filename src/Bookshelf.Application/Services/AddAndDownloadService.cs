@@ -140,6 +140,7 @@ public sealed class AddAndDownloadService : IAddAndDownloadService
         {
             var enqueue = await _downloadExecutionClient.EnqueueAsync(
                 candidate.DownloadUri,
+                candidate.CandidateId,
                 cancellationToken);
 
             var nowUtc = DateTimeOffset.UtcNow;

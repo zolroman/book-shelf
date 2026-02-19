@@ -483,6 +483,7 @@ public class AddAndDownloadServiceTests
 
         public Task<DownloadEnqueueResult> EnqueueAsync(
             string downloadUri,
+            string candidateId,
             CancellationToken cancellationToken = default)
         {
             EnqueueCalls++;

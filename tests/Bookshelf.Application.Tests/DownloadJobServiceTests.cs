@@ -497,7 +497,10 @@ public class DownloadJobServiceTests
 
         public TimeSpan NotFoundGracePeriod { get; set; } = TimeSpan.FromSeconds(60);
 
-        public Task<DownloadEnqueueResult> EnqueueAsync(string downloadUri, CancellationToken cancellationToken = default)
+        public Task<DownloadEnqueueResult> EnqueueAsync(
+            string downloadUri,
+            string candidateId,
+            CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new DownloadEnqueueResult("hash"));
         }

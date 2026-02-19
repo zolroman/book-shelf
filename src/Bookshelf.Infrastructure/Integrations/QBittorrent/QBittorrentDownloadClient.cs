@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Linq;
 using System.Net;
 using System.Text.Json;
 using Bookshelf.Application.Abstractions.Providers;
@@ -37,6 +38,7 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
 
     public async Task<DownloadEnqueueResult> EnqueueAsync(
         string downloadUri,
+        string candidateId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(downloadUri))
@@ -44,18 +46,29 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             throw new DownloadExecutionFailedException(ProviderCode, "downloadUri is required.");
         }
 
+        if (string.IsNullOrWhiteSpace(candidateId))
+        {
+            throw new DownloadExecutionFailedException(ProviderCode, "candidateId is required.");
+        }
+
+        var normalizedDownloadUri = downloadUri.Trim();
+        var normalizedCandidateId = candidateId.Trim();
+
         using var response = await SendWithRetryAsync(
             operation: "enqueue",
             requestFactory: () => new HttpRequestMessage(HttpMethod.Post, "/api/v2/torrents/add")
             {
                 Content = new FormUrlEncodedContent(
                 [
-                    new KeyValuePair<string, string>("urls", downloadUri.Trim()),
+                    new KeyValuePair<string, string>("urls", normalizedDownloadUri),
+                    new KeyValuePair<string, string>("tags", normalizedCandidateId),
+                    new KeyValuePair<string, string>("category", "book"),
+                    new KeyValuePair<string, string>("savepath", "books"),
                 ]),
             },
             cancellationToken);
 
-        return new DownloadEnqueueResult(TryExtractBtih(downloadUri));
+        return new DownloadEnqueueResult(normalizedCandidateId);
     }
 
     public async Task<DownloadStatusResult> GetStatusAsync(
@@ -67,38 +80,19 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             return new DownloadStatusResult(ExternalDownloadState.NotFound, null, null);
         }
 
-        using var response = await SendWithRetryAsync(
-            operation: "status",
-            requestFactory: () =>
-            {
-                var encodedHash = Uri.EscapeDataString(externalJobId.Trim());
-                return new HttpRequestMessage(
-                    HttpMethod.Get,
-                    $"/api/v2/torrents/info?hashes={encodedHash}");
-            },
-            cancellationToken);
-
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(payload))
+        var items = await GetTorrentsByTagAsync(externalJobId.Trim(), cancellationToken);
+        var item = items
+            .OrderByDescending(x => x.AddedAtUtc ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+        if (item is null)
         {
             return new DownloadStatusResult(ExternalDownloadState.NotFound, null, null);
         }
-
-        using var document = JsonDocument.Parse(payload);
-        if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.GetArrayLength() == 0)
-        {
-            return new DownloadStatusResult(ExternalDownloadState.NotFound, null, null);
-        }
-
-        var item = document.RootElement[0];
-        var stateRaw = TryGetString(item, "state");
-        var storagePath = TryGetString(item, "content_path") ?? TryGetString(item, "save_path");
-        var sizeBytes = TryGetInt64(item, "size") ?? TryGetInt64(item, "total_size");
 
         return new DownloadStatusResult(
-            State: MapState(stateRaw),
-            StoragePath: storagePath,
-            SizeBytes: sizeBytes);
+            State: MapState(item.State),
+            StoragePath: item.ContentPath ?? item.SavePath,
+            SizeBytes: item.SizeBytes ?? item.TotalSizeBytes);
     }
 
     public async Task CancelAsync(
@@ -111,18 +105,30 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             throw new DownloadExecutionFailedException(ProviderCode, "externalJobId is required for cancellation.");
         }
 
+        var torrents = await GetTorrentsByTagAsync(externalJobId.Trim(), cancellationToken);
+        var hashes = torrents
+            .Select(x => x.Hash)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (hashes.Length == 0)
+        {
+            _logger.LogInformation(
+                "qBittorrent cancel skipped. No torrents found for tag {Tag}.",
+                externalJobId.Trim());
+            return;
+        }
+
         using var response = await SendWithRetryAsync(
             operation: "cancel",
-            requestFactory: () =>
+            requestFactory: () => new HttpRequestMessage(HttpMethod.Post, "/api/v2/torrents/delete")
             {
-                return new HttpRequestMessage(HttpMethod.Post, "/api/v2/torrents/delete")
-                {
-                    Content = new FormUrlEncodedContent(
-                    [
-                        new KeyValuePair<string, string>("hashes", externalJobId.Trim()),
-                        new KeyValuePair<string, string>("deleteFiles", deleteFiles ? "true" : "false"),
-                    ]),
-                };
+                Content = new FormUrlEncodedContent(
+                [
+                    new KeyValuePair<string, string>("hashes", string.Join('|', hashes)),
+                    new KeyValuePair<string, string>("deleteFiles", deleteFiles ? "true" : "false"),
+                ]),
             },
             cancellationToken);
     }
@@ -208,32 +214,79 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             lastException);
     }
 
-    private static string? TryExtractBtih(string downloadUri)
+    private async Task<IReadOnlyList<QBittorrentTorrentInfo>> GetTorrentsByTagAsync(
+        string candidateTag,
+        CancellationToken cancellationToken)
     {
-        if (!downloadUri.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase))
+        var encodedTag = Uri.EscapeDataString(candidateTag);
+        using var response = await SendWithRetryAsync(
+            operation: "tag_lookup",
+            requestFactory: () => new HttpRequestMessage(
+                HttpMethod.Get,
+                $"/api/v2/torrents/info?tag={encodedTag}&sort=added_on&reverse=true&limit=200"),
+            cancellationToken);
+
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(payload))
         {
-            return null;
+            return [];
         }
 
-        const string marker = "xt=urn:btih:";
-        var markerIndex = downloadUri.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (markerIndex < 0)
+        JsonDocument document;
+        try
         {
-            return null;
+            document = JsonDocument.Parse(payload);
+        }
+        catch (JsonException exception)
+        {
+            throw new DownloadExecutionFailedException(
+                ProviderCode,
+                "qBittorrent tag lookup payload is not valid JSON.",
+                exception);
         }
 
-        var valueStart = markerIndex + marker.Length;
-        var valueEnd = downloadUri.IndexOf('&', valueStart);
-        var hash = valueEnd >= 0
-            ? downloadUri[valueStart..valueEnd]
-            : downloadUri[valueStart..];
-
-        if (string.IsNullOrWhiteSpace(hash))
+        using (document)
         {
-            return null;
-        }
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
 
-        return hash.Trim().ToLowerInvariant();
+            var items = new List<QBittorrentTorrentInfo>();
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                var hash = TryGetString(item, "hash");
+                if (string.IsNullOrWhiteSpace(hash))
+                {
+                    continue;
+                }
+
+                DateTimeOffset? addedAtUtc = null;
+                var addedOnSeconds = TryGetInt64(item, "added_on");
+                if (addedOnSeconds.HasValue && addedOnSeconds.Value > 0)
+                {
+                    try
+                    {
+                        addedAtUtc = DateTimeOffset.FromUnixTimeSeconds(addedOnSeconds.Value);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        addedAtUtc = null;
+                    }
+                }
+
+                items.Add(new QBittorrentTorrentInfo(
+                    Hash: hash.Trim().ToLowerInvariant(),
+                    AddedAtUtc: addedAtUtc,
+                    State: TryGetString(item, "state"),
+                    ContentPath: TryGetString(item, "content_path"),
+                    SavePath: TryGetString(item, "save_path"),
+                    SizeBytes: TryGetInt64(item, "size"),
+                    TotalSizeBytes: TryGetInt64(item, "total_size")));
+            }
+
+            return items;
+        }
     }
 
     private static ExternalDownloadState MapState(string? stateRaw)
@@ -309,4 +362,13 @@ public sealed class QBittorrentDownloadClient : IDownloadExecutionClient
             new("operation", operation),
             new("success", success.ToString().ToLowerInvariant()));
     }
+
+    private sealed record QBittorrentTorrentInfo(
+        string Hash,
+        DateTimeOffset? AddedAtUtc,
+        string? State,
+        string? ContentPath,
+        string? SavePath,
+        long? SizeBytes,
+        long? TotalSizeBytes);
 }

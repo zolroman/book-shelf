@@ -6,6 +6,7 @@ public interface IDownloadExecutionClient
 
     Task<DownloadEnqueueResult> EnqueueAsync(
         string downloadUri,
+        string candidateId,
         CancellationToken cancellationToken = default);
 
     Task<DownloadStatusResult> GetStatusAsync(
