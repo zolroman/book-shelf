@@ -6,7 +6,6 @@ using Bookshelf.Infrastructure.Integrations.Jackett;
 using Bookshelf.Infrastructure.Integrations.QBittorrent;
 using Bookshelf.Infrastructure.Persistence;
 using Bookshelf.Infrastructure.Persistence.Repositories;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +55,6 @@ public static class DependencyInjection
         });
         services.Configure<JackettOptions>(options =>
         {
-            options.Enabled = GetBool(configuration, "JACKETT_ENABLED", "Jackett:Enabled", true);
             options.BaseUrl = GetString(configuration, "JACKETT_BASE_URL", "Jackett:BaseUrl", "http://192.168.40.25:9117");
             options.ApiKey = GetString(configuration, "JACKETT_API_KEY", "Jackett:ApiKey", string.Empty);
             options.Indexer = GetString(configuration, "JACKETT_INDEXER", "Jackett:Indexer", "all");

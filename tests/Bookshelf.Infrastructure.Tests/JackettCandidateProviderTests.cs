@@ -139,7 +139,6 @@ public class JackettCandidateProviderTests
     {
         var options = new JackettOptions
         {
-            Enabled = true,
             BaseUrl = "http://jackett.test",
             ApiKey = "test-key",
             Indexer = "all",

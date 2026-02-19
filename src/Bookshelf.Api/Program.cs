@@ -17,6 +17,7 @@ using Bookshelf.Shared.Contracts.System;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -24,7 +25,7 @@ using OpenTelemetry.Trace;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
-builder.Logging.AddJsonConsole();
+builder.Logging.AddConsole();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddOpenApi();
@@ -189,5 +190,6 @@ static void ConfigureOpenTelemetry(
             {
                 metrics.AddOtlpExporter(options => options.Endpoint = otlpEndpointUri!);
             }
-        });
+        })
+        .WithLogging(logging => logging.AddOtlpExporter());
 }

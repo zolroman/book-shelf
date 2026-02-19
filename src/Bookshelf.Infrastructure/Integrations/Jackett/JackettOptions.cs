@@ -2,8 +2,6 @@ namespace Bookshelf.Infrastructure.Integrations.Jackett;
 
 public sealed class JackettOptions
 {
-    public bool Enabled { get; set; } = true;
-
     public string BaseUrl { get; set; } = "http://192.168.40.25:9117";
 
     public string ApiKey { get; set; } = string.Empty;

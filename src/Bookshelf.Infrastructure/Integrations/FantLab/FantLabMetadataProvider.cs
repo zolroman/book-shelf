@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Exceptions;
 using Microsoft.Extensions.Caching.Memory;
@@ -19,6 +20,11 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
     private static readonly Counter<long> RequestCounter = Meter.CreateCounter<long>("fantlab_requests_total");
     private static readonly Counter<long> FailureCounter = Meter.CreateCounter<long>("fantlab_failures_total");
     private static readonly Histogram<double> LatencyHistogram = Meter.CreateHistogram<double>("fantlab_request_duration_ms");
+    private static readonly JsonSerializerOptions FantLabSearchJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+    };
 
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
@@ -194,41 +200,42 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
     private MetadataSearchResult ParseSearchPayload(string payload)
     {
-        using var document = JsonDocument.Parse(payload);
-        var root = document.RootElement;
-        var itemsNode = FindArrayNode(root, "items", "results", "works", "books", "data") ?? (root.ValueKind == JsonValueKind.Array ? root : default);
-
-        if (itemsNode.ValueKind != JsonValueKind.Array)
-        {
-            throw new MetadataProviderUnavailableException(ProviderCode, "FantLab search payload does not contain an items array.");
-        }
+        var envelope = JsonSerializer.Deserialize<FantLabSearchResponseContract>(payload, FantLabSearchJsonOptions)
+                       ?? throw new MetadataProviderUnavailableException(ProviderCode,
+                           "FantLab search payload does not contain an items array.");
 
         var items = new List<MetadataSearchItem>();
-        foreach (var element in itemsNode.EnumerateArray())
+        foreach (var source in envelope.Matches)
         {
-            var providerBookKey = GetStringValue(element, "providerBookKey", "bookId", "work_id", "workId", "id");
-            var title = GetStringValue(element, "rusname", "title", "work_name", "workName", "fullname", "name", "altname");
+            var providerBookKey = source.WorkId?.ToString();
+
+            var title = FirstNonEmpty(
+                source.RusName,
+                source.Name,
+                source.AltName);
+
             title = NormalizeDisplayText(title);
             if (string.IsNullOrWhiteSpace(providerBookKey) || string.IsNullOrWhiteSpace(title))
             {
                 continue;
             }
 
-            var authors = GetSearchAuthors(element);
-            var series = ParseSeries(element);
+            var authors = GetSearchAuthors(source);
+            
             items.Add(new MetadataSearchItem(
                 ProviderBookKey: providerBookKey,
                 Title: title,
                 Authors: authors,
-                Series: series));
+                Series: null));
         }
 
         if (items.Count == 0)
         {
-            throw new MetadataProviderUnavailableException(ProviderCode, "FantLab search payload did not include minimally valid items.");
+            throw new MetadataProviderUnavailableException(ProviderCode,
+                "FantLab search payload did not include minimally valid items.");
         }
 
-        var total = GetIntValue(root, "total", "count") ?? itemsNode.GetArrayLength();
+        var total = envelope.Total;
         return new MetadataSearchResult(total, items);
     }
 
@@ -314,7 +321,7 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         }
 
         queryParts.Add($"page={page}");
-        queryParts.Add("onlymatches=1");
+        // queryParts.Add("onlymatches=1");
 
         var path = _options.SearchPath.StartsWith('/') ? _options.SearchPath : $"/{_options.SearchPath}";
         var query = string.Join("&", queryParts);
@@ -382,19 +389,6 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
         var normalized = string.Join(' ', value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
-    }
-
-    private static JsonElement? FindArrayNode(JsonElement root, params string[] names)
-    {
-        foreach (var name in names)
-        {
-            if (TryGetProperty(root, out var node, name) && node.ValueKind == JsonValueKind.Array)
-            {
-                return node;
-            }
-        }
-
-        return null;
     }
 
     private static JsonElement? FindObjectNode(JsonElement root, params string[] names)
@@ -516,21 +510,27 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         return values;
     }
 
-    private static IReadOnlyList<string> GetSearchAuthors(JsonElement node)
+    private static IReadOnlyList<string> GetSearchAuthors(FantLabSearchItemContract node)
     {
         var result = new List<string>();
         var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        void AddSingle(string? rawValue)
-        {
-            var normalized = NormalizeDisplayText(rawValue);
-            if (string.IsNullOrWhiteSpace(normalized) || !unique.Add(normalized))
-            {
-                return;
-            }
+        AddMany(node.AllAutorRusName);
+        AddMany(node.AllAutorName);
+        AddSingle(node.AutorRusName);
+        AddSingle(node.AutorName);
+        AddSingle(node.Autor1RusName);
+        AddSingle(node.Autor2RusName);
+        AddSingle(node.Autor3RusName);
+        AddSingle(node.Autor4RusName);
+        AddSingle(node.Autor5RusName);
+        AddSingle(node.Autor1Name);
+        AddSingle(node.Autor2Name);
+        AddSingle(node.Autor3Name);
+        AddSingle(node.Autor4Name);
+        AddSingle(node.Autor5Name);
 
-            result.Add(normalized);
-        }
+        return result;
 
         void AddMany(string? rawValue)
         {
@@ -545,20 +545,195 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
             }
         }
 
-        foreach (var author in GetStringList(node, "authors", "author", "writers"))
+        void AddSingle(string? rawValue)
         {
-            AddSingle(author);
+            var normalized = NormalizeDisplayText(rawValue);
+            if (string.IsNullOrWhiteSpace(normalized) || !unique.Add(normalized))
+            {
+                return;
+            }
+
+            result.Add(normalized);
+        }
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            var normalized = NormalizeDisplayText(value);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                return normalized;
+            }
         }
 
-        AddMany(GetStringValue(node, "all_autor_rusname", "all_autor_name"));
-        AddSingle(GetStringValue(node, "autor_rusname", "autor_name"));
+        return null;
+    }
 
-        for (var index = 1; index <= 5; index++)
-        {
-            AddSingle(GetStringValue(node, $"autor{index}_rusname", $"autor{index}_name"));
-        }
+    private sealed class FantLabSearchResponseContract
+    {
+        [JsonPropertyName("total")]
+        public int Total { get; init; }
 
-        return result;
+        [JsonPropertyName("total_found")]
+        public int TotalFound { get; init; }
+
+        [JsonPropertyName("matches")]
+        public List<FantLabSearchItemContract> Matches { get; init; } = [];
+    }
+
+    private sealed class FantLabSearchItemContract
+    {
+        [JsonPropertyName("work_id")]
+        public long? WorkId { get; init; }
+
+        [JsonPropertyName("doc")]
+        public long? Doc { get; init; }
+
+        [JsonPropertyName("work_type_id")]
+        public int? WorkTypeId { get; init; }
+
+        [JsonPropertyName("year")]
+        public int? Year { get; init; }
+
+        [JsonPropertyName("group_index")]
+        public int? GroupIndex { get; init; }
+
+        [JsonPropertyName("level")]
+        public int? Level { get; init; }
+
+        [JsonPropertyName("recom_level")]
+        public int? RecomLevel { get; init; }
+
+        [JsonPropertyName("markcount")]
+        public int? MarkCount { get; init; }
+
+        [JsonPropertyName("weight")]
+        public int? Weight { get; init; }
+
+        [JsonPropertyName("name_eng")]
+        public string? NameEng { get; init; }
+
+        [JsonPropertyName("name_show_im")]
+        public string? NameShowIm { get; init; }
+
+        [JsonPropertyName("keywords")]
+        public string? Keywords { get; init; }
+
+        [JsonPropertyName("nearest_parent_work_id")]
+        public long? NearestParentWorkId { get; init; }
+
+        [JsonPropertyName("parent_work_id")]
+        public long? ParentWorkId { get; init; }
+
+        [JsonPropertyName("parent_work_id_present")]
+        public int? ParentWorkIdPresent { get; init; }
+
+        [JsonPropertyName("pic_edition_id")]
+        public long? PicEditionId { get; init; }
+
+        [JsonPropertyName("pic_edition_id_auto")]
+        public long? PicEditionIdAuto { get; init; }
+
+        [JsonPropertyName("midmark")]
+        public List<double>? Midmark { get; init; }
+
+        [JsonPropertyName("midmark_by_weight")]
+        public List<double>? MidmarkByWeight { get; init; }
+
+        [JsonPropertyName("rating")]
+        public List<double>? Rating { get; init; }
+
+        [JsonPropertyName("rusname")]
+        public string? RusName { get; init; }
+
+        [JsonPropertyName("fullname")]
+        public string? FullName { get; init; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
+
+        [JsonPropertyName("altname")]
+        public string? AltName { get; init; }
+
+        [JsonPropertyName("all_autor_rusname")]
+        public string? AllAutorRusName { get; init; }
+
+        [JsonPropertyName("all_autor_name")]
+        public string? AllAutorName { get; init; }
+
+        [JsonPropertyName("autor_rusname")]
+        public string? AutorRusName { get; init; }
+
+        [JsonPropertyName("autor_name")]
+        public string? AutorName { get; init; }
+
+        [JsonPropertyName("autor_id")]
+        public long? AutorId { get; init; }
+
+        [JsonPropertyName("autor_is_opened")]
+        public int? AutorIsOpened { get; init; }
+
+        [JsonPropertyName("autor1_rusname")]
+        public string? Autor1RusName { get; init; }
+
+        [JsonPropertyName("autor1_id")]
+        public long? Autor1Id { get; init; }
+
+        [JsonPropertyName("autor1_is_opened")]
+        public int? Autor1IsOpened { get; init; }
+
+        [JsonPropertyName("autor2_rusname")]
+        public string? Autor2RusName { get; init; }
+
+        [JsonPropertyName("autor2_id")]
+        public long? Autor2Id { get; init; }
+
+        [JsonPropertyName("autor2_is_opened")]
+        public int? Autor2IsOpened { get; init; }
+
+        [JsonPropertyName("autor3_rusname")]
+        public string? Autor3RusName { get; init; }
+
+        [JsonPropertyName("autor3_id")]
+        public long? Autor3Id { get; init; }
+
+        [JsonPropertyName("autor3_is_opened")]
+        public int? Autor3IsOpened { get; init; }
+
+        [JsonPropertyName("autor4_rusname")]
+        public string? Autor4RusName { get; init; }
+
+        [JsonPropertyName("autor4_id")]
+        public long? Autor4Id { get; init; }
+
+        [JsonPropertyName("autor4_is_opened")]
+        public int? Autor4IsOpened { get; init; }
+
+        [JsonPropertyName("autor5_rusname")]
+        public string? Autor5RusName { get; init; }
+
+        [JsonPropertyName("autor5_id")]
+        public long? Autor5Id { get; init; }
+
+        [JsonPropertyName("autor5_is_opened")]
+        public int? Autor5IsOpened { get; init; }
+
+        [JsonPropertyName("autor1_name")]
+        public string? Autor1Name { get; init; }
+
+        [JsonPropertyName("autor2_name")]
+        public string? Autor2Name { get; init; }
+
+        [JsonPropertyName("autor3_name")]
+        public string? Autor3Name { get; init; }
+
+        [JsonPropertyName("autor4_name")]
+        public string? Autor4Name { get; init; }
+
+        [JsonPropertyName("autor5_name")]
+        public string? Autor5Name { get; init; }
     }
 
     private static string? NormalizeDisplayText(string? value)

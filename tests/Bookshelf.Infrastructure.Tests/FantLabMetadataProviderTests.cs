@@ -51,11 +51,11 @@ public class FantLabMetadataProviderTests
         Assert.Equal("Frank Herbert", Assert.Single(item.Authors));
         Assert.NotNull(item.Series);
         Assert.Equal("777", item.Series!.ProviderSeriesKey);
-        Assert.Equal("/api/search?q=Dune%20Messiah&author=Frank%20Herbert&page=1&onlymatches=1", handler.Requests.Single());
+        Assert.Equal("/api/search?q=Dune%20Messiah&author=Frank%20Herbert&page=1", handler.Requests.Single());
     }
 
     [Fact]
-    public async Task SearchAsync_ParsesFantLabArrayPayloadShape()
+    public async Task SearchAsync_RejectsFantLabArrayPayloadShape()
     {
         var handler = new SequenceHttpHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
@@ -90,21 +90,52 @@ public class FantLabMetadataProviderTests
             options.SearchPath = "/api/search";
         });
 
+        await Assert.ThrowsAsync<MetadataProviderUnavailableException>(
+            async () => await provider.SearchAsync(new MetadataSearchRequest("Московский клуб", null, 1)));
+    }
+
+    [Fact]
+    public async Task SearchAsync_ParsesFantLabMatchesEnvelopePayloadShape()
+    {
+        var handler = new SequenceHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "matches": [
+                        {
+                          "work_id": 9786,
+                          "rusname": "Quicksilver RU",
+                          "name": "Quicksilver",
+                          "fullname": " Quicksilver  ",
+                          "all_autor_name": "Neal Stephenson",
+                          "all_autor_rusname": "Neal Stephenson"
+                        }
+                      ],
+                      "total": 54,
+                      "total_found": 54,
+                      "type": "works"
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            });
+
+        var provider = CreateProvider(handler, options =>
+        {
+            options.BaseUrl = "http://fantlab.test";
+            options.SearchPath = "/api/search";
+        });
+
         var result = await provider.SearchAsync(
-            new MetadataSearchRequest("Московский клуб", null, 1));
+            new MetadataSearchRequest("Quicksilver", null, 1));
 
-        Assert.Equal(2, result.Total);
-        Assert.Equal(2, result.Items.Count);
-
-        var first = result.Items[0];
-        Assert.Equal("4333", first.ProviderBookKey);
-        Assert.Equal("Московский клуб", first.Title);
-        Assert.Equal("Вадим Панов", Assert.Single(first.Authors));
-
-        var second = result.Items[1];
-        Assert.Equal("1000609", second.ProviderBookKey);
-        Assert.Equal("Московский фан-клуб \"Звездных войн\" объявляет конкурс фан-арта по тематике ЗВ", second.Title);
-        Assert.Empty(second.Authors);
+        Assert.Equal(54, result.Total);
+        var item = Assert.Single(result.Items);
+        Assert.Equal("9786", item.ProviderBookKey);
+        Assert.Equal("Quicksilver RU", item.Title);
+        Assert.Contains("Neal Stephenson", item.Authors);
     }
 
     [Fact]

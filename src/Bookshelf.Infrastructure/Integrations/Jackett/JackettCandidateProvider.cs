@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net;
-using System.Text;
 using System.Xml.Linq;
 using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Exceptions;
@@ -40,11 +39,6 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
         int maxItems,
         CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled)
-        {
-            throw new DownloadCandidateProviderUnavailableException(ProviderCode, "Jackett integration is disabled.");
-        }
-
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             throw new DownloadCandidateProviderUnavailableException(ProviderCode, "Jackett API key is not configured.");
