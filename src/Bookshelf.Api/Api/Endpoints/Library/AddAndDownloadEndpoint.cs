@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
@@ -9,6 +10,12 @@ namespace Bookshelf.Api.Api.Endpoints.Library;
 
 public static class AddAndDownloadEndpoint
 {
+    private sealed record RequestBody(
+        string ProviderCode,
+        string ProviderBookKey,
+        string MediaType,
+        string CandidateId);
+
     public static RouteGroupBuilder MapAddAndDownloadEndpoint(this RouteGroupBuilder v1)
     {
         v1.MapPost("library/add-and-download", Handle);
@@ -16,11 +23,12 @@ public static class AddAndDownloadEndpoint
     }
 
     private static async Task<IResult> Handle(
-        AddAndDownloadRequest request,
+        RequestBody request,
+        ClaimsPrincipal user,
         IAddAndDownloadService addAndDownloadService,
         CancellationToken cancellationToken)
     {
-        EndpointGuards.EnsureUserId(request.UserId);
+        var userId = user.Id;
         EndpointGuards.EnsureRequired(request.ProviderCode, nameof(request.ProviderCode));
         EndpointGuards.EnsureRequired(request.ProviderBookKey, nameof(request.ProviderBookKey));
         _ = EndpointGuards.EnsureMediaType(request.MediaType);
@@ -35,7 +43,14 @@ public static class AddAndDownloadEndpoint
 
         try
         {
-            var response = await addAndDownloadService.ExecuteAsync(request, cancellationToken);
+            var serviceRequest = new AddAndDownloadRequest(
+                UserId: userId,
+                ProviderCode: request.ProviderCode,
+                ProviderBookKey: request.ProviderBookKey,
+                MediaType: request.MediaType,
+                CandidateId: request.CandidateId);
+
+            var response = await addAndDownloadService.ExecuteAsync(serviceRequest, cancellationToken);
             return Results.Ok(response);
         }
         catch (BookNotFoundException)

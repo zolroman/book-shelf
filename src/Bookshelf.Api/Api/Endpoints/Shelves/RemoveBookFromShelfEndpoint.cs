@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
@@ -16,11 +17,11 @@ public static class RemoveBookFromShelfEndpoint
     private static async Task<IResult> Handle(
         long shelfId,
         long bookId,
-        long? userId,
+        ClaimsPrincipal user,
         IShelfService shelfService,
         CancellationToken cancellationToken)
     {
-        var normalizedUserId = EndpointGuards.EnsureUserId(userId);
+        var userId = user.Id;
         if (bookId <= 0)
         {
             throw new ApiException(
@@ -31,7 +32,7 @@ public static class RemoveBookFromShelfEndpoint
 
         var removed = await shelfService.RemoveBookAsync(
             shelfId,
-            normalizedUserId,
+            userId,
             bookId,
             cancellationToken);
         if (!removed)

@@ -36,9 +36,7 @@ public static class SearchBookCandidatesEndpoint
         }
 
         var normalizedMediaType = EndpointGuards.EnsureMediaType(mediaType);
-
-        var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
-        var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
+        var pagination = EndpointGuards.NormalizePaging(page, pageSize);
 
         try
         {
@@ -46,8 +44,8 @@ public static class SearchBookCandidatesEndpoint
                 providerCode,
                 providerBookKey,
                 normalizedMediaType,
-                safePage,
-                safePageSize,
+                pagination.Page,
+                pagination.PageSize,
                 cancellationToken);
 
             return Results.Ok(response);

@@ -18,6 +18,16 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
     private readonly UserSessionState _sessionState;
     private readonly ILogger<BookshelfApiClient> _logger;
 
+    private sealed record AddAndDownloadBody(
+        string ProviderCode,
+        string ProviderBookKey,
+        string MediaType,
+        string CandidateId);
+
+    private sealed record CreateShelfBody(string Name);
+
+    private sealed record AddBookToShelfBody(long BookId);
+
     public BookshelfApiClient(
         HttpClient httpClient,
         UserSessionState sessionState,
@@ -80,8 +90,7 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         string candidateId,
         CancellationToken cancellationToken = default)
     {
-        var body = new AddAndDownloadRequest(
-            UserId: _sessionState.UserId,
+        var body = new AddAndDownloadBody(
             ProviderCode: providerCode,
             ProviderBookKey: providerBookKey,
             MediaType: mediaType,
@@ -99,7 +108,6 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         CancellationToken cancellationToken = default)
     {
         var query = BuildQuery(
-            ("userId", _sessionState.UserId.ToString()),
             ("status", status),
             ("page", page.ToString()),
             ("pageSize", pageSize.ToString()));
@@ -111,8 +119,7 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         long jobId,
         CancellationToken cancellationToken = default)
     {
-        var query = BuildQuery(("userId", _sessionState.UserId.ToString()));
-        var request = CreateRequest(HttpMethod.Get, $"/api/v1/download-jobs/{jobId}{query}");
+        var request = CreateRequest(HttpMethod.Get, $"/api/v1/download-jobs/{jobId}");
         return SendAsync<DownloadJobDto>(request, cancellationToken);
     }
 
@@ -121,7 +128,6 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         CancellationToken cancellationToken = default)
     {
         var request = CreateRequest(HttpMethod.Post, $"/api/v1/download-jobs/{jobId}/cancel");
-        request.Content = Serialize(new CancelDownloadJobRequest(_sessionState.UserId));
         return SendAsync<DownloadJobDto>(request, cancellationToken);
     }
 
@@ -147,15 +153,14 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
 
     public Task<ShelvesResponse> GetShelvesAsync(CancellationToken cancellationToken = default)
     {
-        var query = BuildQuery(("userId", _sessionState.UserId.ToString()));
-        var request = CreateRequest(HttpMethod.Get, $"/api/v1/shelves{query}");
+        var request = CreateRequest(HttpMethod.Get, "/api/v1/shelves");
         return SendAsync<ShelvesResponse>(request, cancellationToken);
     }
 
     public Task<CreateShelfResponse> CreateShelfAsync(string name, CancellationToken cancellationToken = default)
     {
         var request = CreateRequest(HttpMethod.Post, "/api/v1/shelves");
-        request.Content = Serialize(new CreateShelfRequest(_sessionState.UserId, name));
+        request.Content = Serialize(new CreateShelfBody(name));
         return SendAsync<CreateShelfResponse>(request, cancellationToken);
     }
 
@@ -165,7 +170,7 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         CancellationToken cancellationToken = default)
     {
         var request = CreateRequest(HttpMethod.Post, $"/api/v1/shelves/{shelfId}/books");
-        request.Content = Serialize(new AddBookToShelfRequest(_sessionState.UserId, bookId));
+        request.Content = Serialize(new AddBookToShelfBody(bookId));
         return SendAsync<AddBookToShelfResponse>(request, cancellationToken);
     }
 
@@ -174,8 +179,7 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         long bookId,
         CancellationToken cancellationToken = default)
     {
-        var query = BuildQuery(("userId", _sessionState.UserId.ToString()));
-        var request = CreateRequest(HttpMethod.Delete, $"/api/v1/shelves/{shelfId}/books/{bookId}{query}");
+        var request = CreateRequest(HttpMethod.Delete, $"/api/v1/shelves/{shelfId}/books/{bookId}");
         await SendWithoutPayloadAsync(request, cancellationToken);
     }
 

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
@@ -18,13 +19,12 @@ public static class ListProgressEndpoint
         string? mediaType,
         int? page,
         int? pageSize,
-        HttpContext httpContext,
+        ClaimsPrincipal user,
         IProgressHistoryService progressHistoryService,
         CancellationToken cancellationToken)
     {
-        var userId = EndpointGuards.EnsureUserIdFromClaims(httpContext.User);
-        var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
-        var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
+        var userId = user.Id;
+        var pagination = EndpointGuards.NormalizePaging(page, pageSize);
 
         try
         {
@@ -32,8 +32,8 @@ public static class ListProgressEndpoint
                 userId,
                 bookId,
                 mediaType,
-                safePage,
-                safePageSize,
+                pagination.Page,
+                pagination.PageSize,
                 cancellationToken);
             return Results.Ok(response);
         }

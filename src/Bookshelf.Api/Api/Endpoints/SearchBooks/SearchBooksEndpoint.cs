@@ -1,4 +1,5 @@
 using System.Net;
+using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
 using Bookshelf.Application.Exceptions;
@@ -28,7 +29,7 @@ public static class SearchBooksEndpoint
                 HttpStatusCode.BadRequest);
         }
 
-        var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
+        var safePage = EndpointGuards.NormalizePage(page);
 
         try
         {

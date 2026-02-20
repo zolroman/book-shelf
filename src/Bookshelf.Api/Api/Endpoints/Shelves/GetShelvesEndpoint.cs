@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Application.Abstractions.Services;
 
@@ -12,12 +13,12 @@ public static class GetShelvesEndpoint
     }
 
     private static async Task<IResult> Handle(
-        long? userId,
+        ClaimsPrincipal user,
         IShelfService shelfService,
         CancellationToken cancellationToken)
     {
-        var normalizedUserId = EndpointGuards.EnsureUserId(userId);
-        var response = await shelfService.ListAsync(normalizedUserId, cancellationToken);
+        var userId = user.Id;
+        var response = await shelfService.ListAsync(userId, cancellationToken);
         return Results.Ok(response);
     }
 }

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
@@ -16,15 +17,15 @@ public static class GetDownloadJobEndpoint
 
     private static async Task<IResult> Handle(
         long jobId,
-        long? userId,
+        ClaimsPrincipal user,
         IDownloadJobService downloadJobService,
         CancellationToken cancellationToken)
     {
-        var normalizedUserId = EndpointGuards.EnsureUserId(userId);
+        var userId = user.Id;
 
         try
         {
-            var job = await downloadJobService.GetAsync(jobId, normalizedUserId, cancellationToken);
+            var job = await downloadJobService.GetAsync(jobId, userId, cancellationToken);
             if (job is null)
             {
                 throw new ApiException(

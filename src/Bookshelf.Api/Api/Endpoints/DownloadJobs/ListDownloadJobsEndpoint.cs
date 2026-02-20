@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
@@ -15,24 +16,23 @@ public static class ListDownloadJobsEndpoint
     }
 
     private static async Task<IResult> Handle(
-        long? userId,
         string? status,
         int? page,
         int? pageSize,
+        ClaimsPrincipal user,
         IDownloadJobService downloadJobService,
         CancellationToken cancellationToken)
     {
-        var normalizedUserId = EndpointGuards.EnsureUserId(userId);
-        var safePage = !page.HasValue || page.Value < 1 ? 1 : page.Value;
-        var safePageSize = !pageSize.HasValue || pageSize.Value is < 1 or > 100 ? 20 : pageSize.Value;
+        var userId = user.Id;
+        var pagination = EndpointGuards.NormalizePaging(page, pageSize);
 
         try
         {
             var response = await downloadJobService.ListAsync(
-                normalizedUserId,
+                userId,
                 status,
-                safePage,
-                safePageSize,
+                pagination.Page,
+                pagination.PageSize,
                 cancellationToken);
             return Results.Ok(response);
         }

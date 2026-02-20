@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
@@ -17,11 +18,11 @@ public static class UpsertProgressEndpoint
 
     private static async Task<IResult> Handle(
         UpsertProgressRequest request,
-        HttpContext httpContext,
+        ClaimsPrincipal user,
         IProgressHistoryService progressHistoryService,
         CancellationToken cancellationToken)
     {
-        var userId = EndpointGuards.EnsureUserIdFromClaims(httpContext.User);
+        var userId = user.Id;
         if (request.BookId <= 0)
         {
             throw new ApiException(

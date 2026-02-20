@@ -1,40 +1,13 @@
 using System.Net;
-using System.Security.Claims;
 using Bookshelf.Api.Api.Errors;
 
 namespace Bookshelf.Api.Api.Endpoints.Common;
 
 internal static class EndpointGuards
 {
-    internal static long EnsureUserId(long? userId)
-    {
-        if (!userId.HasValue || userId.Value <= 0)
-        {
-            throw new ApiException(
-                ApiErrorCodes.InvalidArgument,
-                "userId must be greater than zero.",
-                HttpStatusCode.BadRequest);
-        }
-
-        return userId.Value;
-    }
-
-    internal static long EnsureUserIdFromClaims(ClaimsPrincipal user)
-    {
-        var raw = user.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? user.FindFirstValue("userId")
-            ?? user.FindFirstValue("sub");
-
-        if (long.TryParse(raw, out var parsed) && parsed > 0)
-        {
-            return parsed;
-        }
-
-        throw new ApiException(
-            ApiErrorCodes.InvalidArgument,
-            "Authenticated user id claim is missing or invalid.",
-            HttpStatusCode.BadRequest);
-    }
+    private const int DefaultPage = 1;
+    private const int DefaultPageSize = 20;
+    private const int MaxPageSize = 100;
 
     internal static string EnsureMediaType(string? mediaType)
     {
@@ -67,5 +40,17 @@ internal static class EndpointGuards
                 $"{argumentName} is required.",
                 HttpStatusCode.BadRequest);
         }
+    }
+
+    internal static int NormalizePage(int? page)
+    {
+        return page is null or < 1 ? DefaultPage : page.Value;
+    }
+
+    internal static PaginationQuery NormalizePaging(int? page, int? pageSize)
+    {
+        var normalizedPage = NormalizePage(page);
+        var normalizedPageSize = pageSize is null or < 1 or > MaxPageSize ? DefaultPageSize : pageSize.Value;
+        return new PaginationQuery(normalizedPage, normalizedPageSize);
     }
 }

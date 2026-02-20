@@ -1,9 +1,9 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
 using Bookshelf.Application.Exceptions;
-using Bookshelf.Shared.Contracts.Api;
 
 namespace Bookshelf.Api.Api.Endpoints.DownloadJobs;
 
@@ -17,15 +17,15 @@ public static class CancelDownloadJobEndpoint
 
     private static async Task<IResult> Handle(
         long jobId,
-        CancelDownloadJobRequest request,
+        ClaimsPrincipal user,
         IDownloadJobService downloadJobService,
         CancellationToken cancellationToken)
     {
-        EndpointGuards.EnsureUserId(request.UserId);
+        var userId = user.Id;
 
         try
         {
-            var job = await downloadJobService.CancelAsync(jobId, request.UserId, cancellationToken);
+            var job = await downloadJobService.CancelAsync(jobId, userId, cancellationToken);
             return Results.Ok(job);
         }
         catch (DownloadJobNotFoundException)

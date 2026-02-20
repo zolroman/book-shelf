@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
@@ -8,6 +9,8 @@ namespace Bookshelf.Api.Api.Endpoints.Shelves;
 
 public static class AddBookToShelfEndpoint
 {
+    private sealed record RequestBody(long BookId);
+
     public static RouteGroupBuilder MapAddBookToShelfEndpoint(this RouteGroupBuilder v1)
     {
         v1.MapPost("shelves/{shelfId:long}/books", Handle);
@@ -16,11 +19,12 @@ public static class AddBookToShelfEndpoint
 
     private static async Task<IResult> Handle(
         long shelfId,
-        AddBookToShelfRequest request,
+        RequestBody request,
+        ClaimsPrincipal user,
         IShelfService shelfService,
         CancellationToken cancellationToken)
     {
-        var userId = EndpointGuards.EnsureUserId(request.UserId);
+        var userId = user.Id;
         if (request.BookId <= 0)
         {
             throw new ApiException(
