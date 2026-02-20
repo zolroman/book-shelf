@@ -2,17 +2,10 @@ using Bookshelf.Shared.Diagnostics;
 
 namespace Bookshelf.Api.Api.Middleware;
 
-public sealed class CorrelationIdMiddleware
+public sealed class CorrelationIdMiddleware(RequestDelegate next)
 {
     public const string HeaderName = "X-Correlation-Id";
     public const string ItemKey = "CorrelationId";
-
-    private readonly RequestDelegate _next;
-
-    public CorrelationIdMiddleware(RequestDelegate next)
-    {
-        _next = next;
-    }
 
     public async Task Invoke(HttpContext context)
     {
@@ -29,7 +22,7 @@ public sealed class CorrelationIdMiddleware
         context.Response.Headers[HeaderName] = correlationId;
         try
         {
-            await _next(context);
+            await next(context);
         }
         finally
         {

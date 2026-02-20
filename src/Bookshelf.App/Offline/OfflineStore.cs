@@ -552,7 +552,7 @@ public sealed class OfflineStore
                 Attempts: reader.GetInt32(3)));
         }
 
-        return items;
+        return items.ToArray();
     }
 
     public async Task MarkQueueOperationSucceededAsync(long queueItemId, CancellationToken cancellationToken = default)
