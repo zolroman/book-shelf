@@ -5,6 +5,7 @@ using Bookshelf.Application;
 using Bookshelf.Application.Services;
 using Bookshelf.Api.Api;
 using Bookshelf.Api.Api.Auth;
+using Bookshelf.Api.Api.Endpoints;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Api.Api.HealthChecks;
 using Bookshelf.Api.Api.Middleware;
