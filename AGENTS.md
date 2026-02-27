@@ -3,6 +3,29 @@
 - use skills
 - use MCP if needed
 
+## Agent Configuration
+- Global sandbox mode for all agents: `Full access` (no sandbox).
+- `default`: Main orchestrator; keeps requirements and merges results.
+  - model: `gpt-5.3-codex`
+  - effort: `xhigh`
+  - sandbox: `full-access`
+- `explorer`: Fast read-heavy scan; finds files, entrypoints, dependencies, and existing patterns.
+  - model: `gpt-5.3-codex-spark`
+  - effort: `medium`
+  - sandbox: `full-access`
+- `reviewer`: Code review focused on correctness and security risks.
+  - model: `gpt-5.3-codex`
+  - effort: `xhigh`
+  - sandbox: `full-access`
+- `backend`: Implements backend changes (APIs, DB, auth, domain logic).
+  - model: `gpt-5.3-codex`
+  - effort: `xhigh`
+  - sandbox: `full-access`
+- `frontend`: Implements web changes (UI, API client, routing, forms) and mobile changes (networking, state, screens, platform constraints).
+  - model: `gpt-5.3-codex`
+  - effort: `xhigh`
+  - sandbox: `full-access`
+
 # Repository Guidelines
 
 ## Project Structure & Module Organization
