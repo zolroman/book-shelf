@@ -16,6 +16,11 @@ public interface IBookshelfApiClient
         string providerBookKey,
         CancellationToken cancellationToken = default);
 
+    Task<SearchSeriesDetailsResponse> GetSeriesDetailsAsync(
+        string providerCode,
+        string providerSeriesKey,
+        CancellationToken cancellationToken = default);
+
     Task<DownloadCandidatesResponse> GetCandidatesAsync(
         string providerCode,
         string providerBookKey,

@@ -25,6 +25,41 @@
   - model: `gpt-5.3-codex`
   - effort: `xhigh`
   - sandbox: `full-access`
+- `playwright_tester`: Executes real-browser Web E2E checks via Playwright CLI, validates navigation/back behavior, and saves visual artifacts.
+  - model: `gpt-5.3-codex`
+  - effort: `high`
+  - sandbox: `full-access`
+
+### Playwright Tester Instructions
+- Scope: Web UI only (`src/Bookshelf.Web` + shared Razor pages). Do not test Mobile App flows.
+- Always use the local Playwright skill wrapper first:
+  - `export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"`
+  - `export PWCLI="$CODEX_HOME/skills/playwright/scripts/playwright_cli.sh"`
+- Preflight:
+  - verify `npx` exists: `command -v npx >/dev/null 2>&1`
+  - if browser install is missing, run `npx playwright install firefox`
+- Runtime expectations:
+  - start API and Web before browser actions
+  - verify endpoints are up before test steps:
+    - `http://localhost:5291/health/live`
+    - `http://localhost:5055/search`
+- Browser workflow (required):
+  - open browser with explicit session and browser:
+    - `"$PWCLI" --session web-e2e open http://localhost:5055/search --browser firefox`
+  - run `snapshot` before using refs (`eXX`)
+  - re-run `snapshot` after each navigation or significant UI change
+- Artifact policy:
+  - save screenshots to `output/playwright/`
+  - preferred naming: `NN-flow-step.png` (example: `01-search-series-results.png`)
+- Validation checklist for navigation flows:
+  - search -> results render expected item type
+  - result -> details/series page opens
+  - details -> back action returns to previous page
+  - explicit UI back link returns to expected URL state (query/page preserved)
+- Cleanup (required):
+  - close Playwright session: `"$PWCLI" --session web-e2e close`
+  - stop temporary `dotnet run` processes started for the test
+  - avoid leaving stale browser/server processes after completion
 
 # Repository Guidelines
 

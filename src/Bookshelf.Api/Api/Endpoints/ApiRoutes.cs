@@ -16,6 +16,7 @@ public static class ApiRoutes
             .RequireAuthorization();
         v1.MapSearchBooksEndpoint();
         v1.MapSearchBookDetailsEndpoint();
+        v1.MapSearchSeriesDetailsEndpoint();
         v1.MapSearchBookCandidatesEndpoint();
         v1.MapGetLibraryEndpoint();
         v1.MapAddAndDownloadEndpoint();

@@ -3,6 +3,7 @@ using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Services;
 using Bookshelf.Domain.Entities;
 using Bookshelf.Domain.Enums;
+using Bookshelf.Shared.Contracts.Api;
 
 namespace Bookshelf.Application.Tests;
 
@@ -60,6 +61,38 @@ public class BookSearchServiceTests
         var notAdded = Assert.Single(response.Items, x => x.ProviderBookKey == "456");
         Assert.False(notAdded.InCatalog);
         Assert.Equal("not_added", notAdded.CatalogState);
+        Assert.Equal(SearchItemKinds.Book, notAdded.Kind);
+        Assert.Null(notAdded.ProviderSeriesKey);
+    }
+
+    [Fact]
+    public async Task SearchAsync_MapsSeriesItems_AsSeriesKind()
+    {
+        var provider = new FakeMetadataProvider("fantlab")
+        {
+            SearchResult = new MetadataSearchResult(
+                Total: 1,
+                Items:
+                [
+                    new MetadataSearchItem(
+                        ProviderBookKey: "4324",
+                        Title: "Dune Chronicles",
+                        Authors: ["Frank Herbert"],
+                        Series: null,
+                        Kind: MetadataSearchItemKinds.Series,
+                        ProviderSeriesKey: "4324"),
+                ]),
+        };
+
+        var service = new BookSearchService([provider], new FakeBookRepository());
+
+        var response = await service.SearchAsync(title: "dune chronicles", author: null, page: 1);
+
+        var seriesItem = Assert.Single(response.Items);
+        Assert.Equal(SearchItemKinds.Series, seriesItem.Kind);
+        Assert.Equal("4324", seriesItem.ProviderSeriesKey);
+        Assert.False(seriesItem.InCatalog);
+        Assert.Equal("not_added", seriesItem.CatalogState);
     }
 
     [Fact]
@@ -112,6 +145,51 @@ public class BookSearchServiceTests
             async () => await service.GetDetailsAsync("other", "123"));
     }
 
+    [Fact]
+    public async Task GetSeriesDetailsAsync_MapsProviderResponse_AndReturnsNullWhenMissing()
+    {
+        var provider = new FakeMetadataProvider("fantlab")
+        {
+            SeriesDetailsByKey =
+            {
+                ["77"] = new MetadataSeriesDetails(
+                    ProviderSeriesKey: "77",
+                    Title: "Dune Saga",
+                    Items:
+                    [
+                        new MetadataSeriesBookItem(
+                            Order: 2,
+                            ProviderBookKey: "456",
+                            Title: "Dune Messiah",
+                            Authors: ["Frank Herbert"],
+                            PublishYear: 1969),
+                        new MetadataSeriesBookItem(
+                            Order: 1,
+                            ProviderBookKey: "123",
+                            Title: "Dune",
+                            Authors: ["Frank Herbert"],
+                            PublishYear: 1965),
+                    ]),
+            },
+        };
+
+        var service = new BookSearchService([provider], new FakeBookRepository());
+
+        var details = await service.GetSeriesDetailsAsync("fantlab", "77");
+        var missing = await service.GetSeriesDetailsAsync("fantlab", "missing");
+
+        Assert.NotNull(details);
+        Assert.Equal("fantlab", details!.ProviderCode);
+        Assert.Equal("77", details.ProviderSeriesKey);
+        Assert.Equal("Dune Saga", details.Title);
+        Assert.Equal(2, details.Items.Count);
+        Assert.Equal(1, details.Items[0].Order);
+        Assert.Equal("123", details.Items[0].ProviderBookKey);
+        Assert.Equal(2, details.Items[1].Order);
+        Assert.Equal("456", details.Items[1].ProviderBookKey);
+        Assert.Null(missing);
+    }
+
     private sealed class FakeMetadataProvider : IMetadataProvider
     {
         public FakeMetadataProvider(string providerCode)
@@ -129,6 +207,9 @@ public class BookSearchServiceTests
         public Dictionary<string, MetadataBookDetails?> DetailsByKey { get; } =
             new(StringComparer.OrdinalIgnoreCase);
 
+        public Dictionary<string, MetadataSeriesDetails?> SeriesDetailsByKey { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
         public Task<MetadataSearchResult> SearchAsync(
             MetadataSearchRequest request,
             CancellationToken cancellationToken = default)
@@ -142,6 +223,14 @@ public class BookSearchServiceTests
             CancellationToken cancellationToken = default)
         {
             DetailsByKey.TryGetValue(providerBookKey, out var details);
+            return Task.FromResult(details);
+        }
+
+        public Task<MetadataSeriesDetails?> GetSeriesDetailsAsync(
+            string providerSeriesKey,
+            CancellationToken cancellationToken = default)
+        {
+            SeriesDetailsByKey.TryGetValue(providerSeriesKey, out var details);
             return Task.FromResult(details);
         }
     }

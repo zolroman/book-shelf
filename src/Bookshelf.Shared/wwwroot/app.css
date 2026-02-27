@@ -248,6 +248,11 @@ a:focus-visible {
     color: #4c5c62;
 }
 
+.badge-series {
+    background: rgba(31, 95, 139, 0.16);
+    color: #1a5177;
+}
+
 .status-queued {
     background: rgba(90, 107, 114, 0.14);
     color: #4b5d64;

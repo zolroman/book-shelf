@@ -20,6 +20,12 @@ else if (_details is not null)
 {
     <section class="page-block">
         <div class="panel">
+            <div class="action-row">
+                <a class="btn btn-secondary touch-target" href="@GetBackHref()">
+                    Back
+                </a>
+            </div>
+
             <h1>@_details.Title</h1>
             <p class="result-meta">@string.Join(", ", _details.Authors)</p>
             @if (!string.IsNullOrWhiteSpace(_details.OriginalTitle))
@@ -102,6 +108,10 @@ else if (_details is not null)
 
     [Parameter]
     public string ProviderBookKey { get; set; } = string.Empty;
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
 
     private SearchBookDetailsResponse? _details;
     private DownloadCandidatesResponse? _textCandidates;
@@ -299,5 +309,28 @@ else if (_details is not null)
         }
 
         return $"{sizeBytes.Value / oneMb:F0} MB";
+    }
+
+    private string GetBackHref()
+    {
+        return NormalizeReturnUrl(ReturnUrl) ?? "/search";
+    }
+
+    private static string? NormalizeReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl))
+        {
+            return null;
+        }
+
+        var value = returnUrl.Trim();
+        if (!value.StartsWith("/", StringComparison.Ordinal) ||
+            value.StartsWith("//", StringComparison.Ordinal) ||
+            value.Contains("://", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return value;
     }
 }

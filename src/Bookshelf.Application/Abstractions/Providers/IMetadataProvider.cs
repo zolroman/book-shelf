@@ -11,4 +11,8 @@ public interface IMetadataProvider
     Task<MetadataBookDetails?> GetDetailsAsync(
         string providerBookKey,
         CancellationToken cancellationToken = default);
+
+    Task<MetadataSeriesDetails?> GetSeriesDetailsAsync(
+        string providerSeriesKey,
+        CancellationToken cancellationToken = default);
 }

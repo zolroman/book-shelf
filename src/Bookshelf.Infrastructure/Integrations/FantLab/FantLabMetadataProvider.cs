@@ -16,6 +16,7 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
     private const string RequestTypeSearch = "search";
     private const string RequestTypeDetails = "details";
+    private const string RequestTypeSeries = "series_details";
     private static readonly Meter Meter = new(MeterName);
     private static readonly Counter<long> RequestCounter = Meter.CreateCounter<long>("fantlab_requests_total");
     private static readonly Counter<long> FailureCounter = Meter.CreateCounter<long>("fantlab_failures_total");
@@ -107,6 +108,41 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         var uri = BuildDetailsUri(normalizedBookKey);
         var payload = await SendWithRetryAsync(uri, RequestTypeDetails, cancellationToken);
         var parsed = ParseDetailsPayload(payload, normalizedBookKey);
+
+        if (parsed is not null && _options.CacheEnabled)
+        {
+            _memoryCache.Set(cacheKey, parsed, TimeSpan.FromHours(_options.DetailsCacheHours));
+        }
+
+        return parsed;
+    }
+
+    public async Task<MetadataSeriesDetails?> GetSeriesDetailsAsync(
+        string providerSeriesKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerSeriesKey))
+        {
+            throw new ArgumentException("Provider series key is required.", nameof(providerSeriesKey));
+        }
+
+        var normalizedSeriesKey = providerSeriesKey.Trim();
+        var cacheKey = $"fantlab:series:{normalizedSeriesKey}";
+        if (_options.CacheEnabled && _memoryCache.TryGetValue(cacheKey, out MetadataSeriesDetails? cachedResult))
+        {
+            return cachedResult;
+        }
+
+        if (IsCircuitOpen())
+        {
+            throw new MetadataProviderUnavailableException(
+                ProviderCode,
+                "FantLab circuit is open and cache does not contain requested series details.");
+        }
+
+        var uri = BuildSeriesDetailsUri(normalizedSeriesKey);
+        var payload = await SendWithRetryAsync(uri, RequestTypeSeries, cancellationToken);
+        var parsed = ParseSeriesDetailsPayload(payload, normalizedSeriesKey);
 
         if (parsed is not null && _options.CacheEnabled)
         {
@@ -248,12 +284,19 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
             var authors = GetSearchAuthors(source);
             var series = ParseSeries(source);
-            
+            var itemKind = IsSeriesSearchItem(source)
+                ? MetadataSearchItemKinds.Series
+                : MetadataSearchItemKinds.Book;
+
             items.Add(new MetadataSearchItem(
                 ProviderBookKey: providerBookKey,
                 Title: title,
                 Authors: authors,
-                Series: series));
+                Series: series,
+                Kind: itemKind,
+                ProviderSeriesKey: itemKind.Equals(MetadataSearchItemKinds.Series, StringComparison.Ordinal)
+                    ? providerBookKey
+                    : null));
         }
 
         if (items.Count == 0)
@@ -297,6 +340,72 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
             Series: series);
     }
 
+    private MetadataSeriesDetails? ParseSeriesDetailsPayload(string payload, string requestedSeriesKey)
+    {
+        using var document = JsonDocument.Parse(payload);
+        var root = document.RootElement;
+        var node = FindObjectNode(root, "item", "book", "work", "data") ?? root;
+        if (node.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var providerSeriesKey = GetStringValue(node, "providerSeriesKey", "series_id", "seriesId", "work_id", "id")
+            ?? requestedSeriesKey;
+        var title = GetStringValue(node, "work_name", "name", "title", "rusname");
+        if (string.IsNullOrWhiteSpace(providerSeriesKey) || string.IsNullOrWhiteSpace(title))
+        {
+            return null;
+        }
+
+        if (!TryGetProperty(node, out var children, "children") || children.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var items = new List<MetadataSeriesBookItem>();
+        var nextOrder = 1;
+        foreach (var child in children.EnumerateArray())
+        {
+            if (child.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var providerBookKey = GetStringValue(child, "work_id", "bookId", "id", "doc");
+            var childTitle = GetStringValue(child, "work_name", "title", "name", "rusname");
+            if (string.IsNullOrWhiteSpace(providerBookKey) || string.IsNullOrWhiteSpace(childTitle))
+            {
+                continue;
+            }
+
+            var order = GetIntValue(child, "order", "series_order", "number") ?? nextOrder;
+            if (order <= 0)
+            {
+                order = nextOrder;
+            }
+
+            items.Add(new MetadataSeriesBookItem(
+                Order: order,
+                ProviderBookKey: providerBookKey,
+                Title: childTitle,
+                Authors: GetStringList(child, "authors", "author", "writers"),
+                PublishYear: GetIntValue(child, "work_year", "publishYear", "year", "publicationYear")));
+
+            nextOrder++;
+        }
+
+        if (items.Count == 0)
+        {
+            return null;
+        }
+
+        return new MetadataSeriesDetails(
+            ProviderSeriesKey: providerSeriesKey,
+            Title: title,
+            Items: items);
+    }
+
     private MetadataSeriesInfo? ParseSeries(JsonElement node)
     {
         JsonElement seriesNode;
@@ -334,6 +443,23 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         return null;
     }
 
+    private static bool IsSeriesSearchItem(FantLabSearchItemContract node)
+    {
+        if (node.WorkTypeId == 4)
+        {
+            return true;
+        }
+
+        var type = NormalizeDisplayText(node.NameShowIm);
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            return false;
+        }
+
+        return type.Equals("цикл", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("cycle", StringComparison.OrdinalIgnoreCase);
+    }
+
     private Uri BuildSearchUri(string? title, string? author, int page)
     {
         var queryParts = new List<string>();
@@ -365,6 +491,13 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         }
 
         return new Uri($"{pathTemplate}?bookKey={Uri.EscapeDataString(bookKey)}", UriKind.Relative);
+    }
+
+    private Uri BuildSeriesDetailsUri(string seriesKey)
+    {
+        var detailsPath = BuildDetailsUri(seriesKey).ToString();
+        var separator = detailsPath.Contains('?') ? "&" : "?";
+        return new Uri($"{detailsPath}{separator}children=1", UriKind.Relative);
     }
 
     private bool IsCircuitOpen()

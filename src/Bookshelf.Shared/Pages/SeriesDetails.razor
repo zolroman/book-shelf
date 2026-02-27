@@ -1,0 +1,140 @@
+@page "/series/{ProviderCode}/{ProviderSeriesKey}"
+@inject IBookshelfApiClient ApiClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Series Details</PageTitle>
+
+@if (_isLoading)
+{
+    <p class="state-text">Loading series details...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="panel state-panel state-error" role="alert">
+        <h1>Series Details</h1>
+        <p>@_error</p>
+        <button class="btn btn-secondary touch-target" type="button" @onclick="LoadAsync">Retry</button>
+    </section>
+}
+else if (_details is not null)
+{
+    <section class="page-block">
+        <div class="panel">
+            <div class="action-row">
+                <a class="btn btn-secondary touch-target" href="@GetBackToSearchHref()">
+                    Back to Search
+                </a>
+            </div>
+
+            <div class="list-head">
+                <h1>@_details.Title</h1>
+                <span>Books: @_details.Items.Count</span>
+            </div>
+
+            <ul class="result-list">
+                @foreach (var item in _details.Items.OrderBy(x => x.Order))
+                {
+                    <li class="result-card">
+                        <div class="result-main">
+                            <a class="result-title" href="@BuildBookHref(item)">
+                                @item.Order. @item.Title
+                            </a>
+                            @if (item.Authors.Count > 0)
+                            {
+                                <div class="result-meta">@string.Join(", ", item.Authors)</div>
+                            }
+                            @if (item.PublishYear.HasValue)
+                            {
+                                <div class="result-meta">Publish year: @item.PublishYear.Value</div>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </section>
+}
+else
+{
+    <section class="panel state-panel">
+        <h1>Series Details</h1>
+        <p>Series was not found.</p>
+        <a class="btn btn-secondary touch-target" href="@GetBackToSearchHref()">
+            Back to Search
+        </a>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public string ProviderCode { get; set; } = string.Empty;
+
+    [Parameter]
+    public string ProviderSeriesKey { get; set; } = string.Empty;
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private SearchSeriesDetailsResponse? _details;
+    private bool _isLoading;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        _details = null;
+
+        try
+        {
+            _details = await ApiClient.GetSeriesDetailsAsync(ProviderCode, ProviderSeriesKey);
+        }
+        catch (ApiClientException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string GetBackToSearchHref()
+    {
+        return NormalizeReturnUrl(ReturnUrl) ?? "/search";
+    }
+
+    private string BuildBookHref(SearchSeriesBookItemDto item)
+    {
+        var currentUri = new Uri(NavigationManager.Uri, UriKind.Absolute);
+        var returnUrl = string.IsNullOrWhiteSpace(currentUri.Query)
+            ? currentUri.AbsolutePath
+            : $"{currentUri.AbsolutePath}{currentUri.Query}";
+
+        return $"/books/{item.ProviderCode}/{item.ProviderBookKey}?returnUrl={Uri.EscapeDataString(returnUrl)}";
+    }
+
+    private static string? NormalizeReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl))
+        {
+            return null;
+        }
+
+        var value = returnUrl.Trim();
+        if (!value.StartsWith("/", StringComparison.Ordinal) ||
+            value.StartsWith("//", StringComparison.Ordinal) ||
+            value.Contains("://", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return value;
+    }
+}

@@ -1,5 +1,11 @@
 namespace Bookshelf.Shared.Contracts.Api;
 
+public static class SearchItemKinds
+{
+    public const string Book = "book";
+    public const string Series = "series";
+}
+
 public sealed record ErrorResponse(
     string Code,
     string Message,
@@ -22,7 +28,9 @@ public sealed record SearchBookItemDto(
     IReadOnlyList<string> Authors,
     SearchSeriesDto? Series,
     bool InCatalog,
-    string CatalogState);
+    string CatalogState,
+    string Kind = SearchItemKinds.Book,
+    string? ProviderSeriesKey = null);
 
 public sealed record SearchBooksResponse(
     SearchBooksQuery Query,
@@ -41,6 +49,20 @@ public sealed record SearchBookDetailsResponse(
     string? CoverUrl,
     IReadOnlyList<string> Authors,
     SearchSeriesDto? Series);
+
+public sealed record SearchSeriesBookItemDto(
+    int Order,
+    string ProviderCode,
+    string ProviderBookKey,
+    string Title,
+    IReadOnlyList<string> Authors,
+    int? PublishYear);
+
+public sealed record SearchSeriesDetailsResponse(
+    string ProviderCode,
+    string ProviderSeriesKey,
+    string Title,
+    IReadOnlyList<SearchSeriesBookItemDto> Items);
 
 public sealed record DownloadCandidateDto(
     string CandidateId,

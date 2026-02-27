@@ -200,5 +200,13 @@ public class CandidateDiscoveryServiceTests
         {
             return Task.FromResult<SearchBookDetailsResponse?>(_details);
         }
+
+        public Task<SearchSeriesDetailsResponse?> GetSeriesDetailsAsync(
+            string providerCode,
+            string providerSeriesKey,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<SearchSeriesDetailsResponse?>(null);
+        }
     }
 }

@@ -1,6 +1,7 @@
 @page "/"
 @page "/search"
 @inject IBookshelfApiClient ApiClient
+@inject NavigationManager NavigationManager
 
 <PageTitle>Search</PageTitle>
 
@@ -64,13 +65,22 @@ else if (_response is not null)
 
                     <li class="result-card">
                         <div class="result-main">
-                            <a class="result-title" href="@($"/books/{item.ProviderCode}/{item.ProviderBookKey}")">
+                            <a class="result-title" href="@BuildResultHref(item)">
                                 @item.Title
                             </a>
-                            <div class="result-meta">
-                                @string.Join(", ", item.Authors)
-                            </div>
-                            @if (item.Series is not null)
+                            @if (item.Authors.Count > 0)
+                            {
+                                <div class="result-meta">
+                                    @string.Join(", ", item.Authors)
+                                </div>
+                            }
+                            @if (item.Kind.Equals(SearchItemKinds.Series, StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="result-meta">
+                                    Series result
+                                </div>
+                            }
+                            else if (item.Series is not null)
                             {
                                 <div class="result-meta">
                                     Series: @item.Series.Title (book @item.Series.Order)
@@ -108,37 +118,88 @@ else if (_response is not null)
 
     private string? _title;
     private string? _author;
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "title")]
+    public string? QueryTitle { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "author")]
+    public string? QueryAuthor { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "page")]
+    public int? QueryPage { get; set; }
+
     private SearchBooksResponse? _response;
     private bool _isLoading;
     private bool _hasSearched;
     private string? _error;
     private int _page = 1;
 
-    private async Task SubmitSearchAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        await SearchAsync(1);
+        var title = NormalizeOptional(QueryTitle);
+        var author = NormalizeOptional(QueryAuthor);
+        var page = QueryPage.GetValueOrDefault(1);
+        if (page < 1)
+        {
+            page = 1;
+        }
+
+        _title = title;
+        _author = author;
+        _page = page;
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(author))
+        {
+            _response = null;
+            _hasSearched = false;
+            _isLoading = false;
+            return;
+        }
+
+        await SearchAsync(title, author, page);
+    }
+
+    private Task SubmitSearchAsync()
+    {
+        var title = NormalizeOptional(_title);
+        var author = NormalizeOptional(_author);
+        if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(author))
+        {
+            _response = null;
+            _hasSearched = true;
+            _error = "Provide title or author.";
+            return Task.CompletedTask;
+        }
+
+        NavigateToSearch(title, author, 1);
+        return Task.CompletedTask;
     }
 
     private async Task RetrySearchAsync()
     {
-        await SearchAsync(_page);
+        await SearchAsync(_title, _author, _page);
     }
 
-    private async Task PreviousPageAsync()
+    private Task PreviousPageAsync()
     {
-        await SearchAsync(Math.Max(1, _page - 1));
+        NavigateToSearch(_response?.Query.Title ?? _title, _response?.Query.Author ?? _author, Math.Max(1, _page - 1));
+        return Task.CompletedTask;
     }
 
-    private async Task NextPageAsync()
+    private Task NextPageAsync()
     {
-        await SearchAsync(_page + 1);
+        NavigateToSearch(_response?.Query.Title ?? _title, _response?.Query.Author ?? _author, _page + 1);
+        return Task.CompletedTask;
     }
 
-    private async Task SearchAsync(int page)
+    private async Task SearchAsync(string? title, string? author, int page)
     {
         _error = null;
 
-        if (string.IsNullOrWhiteSpace(_title) && string.IsNullOrWhiteSpace(_author))
+        if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(author))
         {
             _response = null;
             _hasSearched = true;
@@ -153,10 +214,12 @@ else if (_response is not null)
         try
         {
             _response = await ApiClient.SearchBooksAsync(
-                _title?.Trim(),
-                _author?.Trim(),
+                title,
+                author,
                 page,
                 DefaultPageSize);
+            _title = _response.Query.Title;
+            _author = _response.Query.Author;
         }
         catch (ApiClientException exception)
         {
@@ -168,8 +231,71 @@ else if (_response is not null)
         }
     }
 
+    private void NavigateToSearch(string? title, string? author, int page)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var query = BuildQuery(
+            ("title", NormalizeOptional(title)),
+            ("author", NormalizeOptional(author)),
+            ("page", safePage.ToString()));
+
+        NavigationManager.NavigateTo($"/search{query}");
+    }
+
+    private string BuildResultHref(SearchBookItemDto item)
+    {
+        var returnUrl = BuildSearchUrl(_response?.Query.Title ?? _title, _response?.Query.Author ?? _author, _response?.Page ?? _page);
+        var encodedReturnUrl = Uri.EscapeDataString(returnUrl);
+
+        if (item.Kind.Equals(SearchItemKinds.Series, StringComparison.OrdinalIgnoreCase))
+        {
+            var providerSeriesKey = NormalizeOptional(item.ProviderSeriesKey);
+            if (!string.IsNullOrWhiteSpace(providerSeriesKey))
+            {
+                return $"/series/{item.ProviderCode}/{providerSeriesKey}?returnUrl={encodedReturnUrl}";
+            }
+        }
+
+        return $"/books/{item.ProviderCode}/{item.ProviderBookKey}?returnUrl={encodedReturnUrl}";
+    }
+
+    private static string BuildSearchUrl(string? title, string? author, int page)
+    {
+        var query = BuildQuery(
+            ("title", NormalizeOptional(title)),
+            ("author", NormalizeOptional(author)),
+            ("page", page.ToString()));
+        return $"/search{query}";
+    }
+
+    private static string BuildQuery(params (string Key, string? Value)[] values)
+    {
+        var items = values
+            .Where(x => !string.IsNullOrWhiteSpace(x.Value))
+            .Select(x => $"{Uri.EscapeDataString(x.Key)}={Uri.EscapeDataString(x.Value!)}")
+            .ToArray();
+
+        return items.Length == 0 ? string.Empty : $"?{string.Join("&", items)}";
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var collapsed = string.Join(' ', value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        return string.IsNullOrWhiteSpace(collapsed) ? null : collapsed;
+    }
+
     private static (string Label, string CssClass) GetCatalogBadge(SearchBookItemDto item)
     {
+        if (item.Kind.Equals(SearchItemKinds.Series, StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Series", "badge-series");
+        }
+
         if (item.CatalogState.Equals("library", StringComparison.OrdinalIgnoreCase))
         {
             return ("In Library", "badge-library");

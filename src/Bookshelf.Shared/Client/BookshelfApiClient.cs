@@ -65,6 +65,17 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         return SendAsync<SearchBookDetailsResponse>(request, cancellationToken);
     }
 
+    public Task<SearchSeriesDetailsResponse> GetSeriesDetailsAsync(
+        string providerCode,
+        string providerSeriesKey,
+        CancellationToken cancellationToken = default)
+    {
+        var request = CreateRequest(
+            HttpMethod.Get,
+            $"/api/v1/search/series/{Escape(providerCode)}/{Escape(providerSeriesKey)}");
+        return SendAsync<SearchSeriesDetailsResponse>(request, cancellationToken);
+    }
+
     public Task<DownloadCandidatesResponse> GetCandidatesAsync(
         string providerCode,
         string providerBookKey,

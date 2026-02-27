@@ -14,4 +14,9 @@ public interface IBookSearchService
         string providerCode,
         string providerBookKey,
         CancellationToken cancellationToken = default);
+
+    Task<SearchSeriesDetailsResponse?> GetSeriesDetailsAsync(
+        string providerCode,
+        string providerSeriesKey,
+        CancellationToken cancellationToken = default);
 }

@@ -103,6 +103,36 @@ public sealed class OfflineBookshelfApiClient : IBookshelfApiClient
         throw CreateNetworkRequiredException();
     }
 
+    public async Task<SearchSeriesDetailsResponse> GetSeriesDetailsAsync(
+        string providerCode,
+        string providerSeriesKey,
+        CancellationToken cancellationToken = default)
+    {
+        var key = $"series:{providerCode}:{providerSeriesKey}";
+        var ttl = TimeSpan.FromDays(7);
+        if (_connectivityState.IsOnline)
+        {
+            try
+            {
+                var response = await _remoteClient.GetSeriesDetailsAsync(providerCode, providerSeriesKey, cancellationToken);
+                await _store.SetCacheAsync(key, response, ttl, cancellationToken);
+                return response;
+            }
+            catch (ApiClientException exception) when (IsOfflineEquivalent(exception))
+            {
+                _logger.LogWarning(exception, "Series details request failed. Falling back to cache.");
+            }
+        }
+
+        var cached = await _store.GetCacheAsync<SearchSeriesDetailsResponse>(key, cancellationToken);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        throw CreateNetworkRequiredException();
+    }
+
     public Task<DownloadCandidatesResponse> GetCandidatesAsync(
         string providerCode,
         string providerBookKey,

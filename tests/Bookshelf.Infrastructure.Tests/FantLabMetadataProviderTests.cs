@@ -51,6 +51,8 @@ public class FantLabMetadataProviderTests
         Assert.Equal("Frank Herbert", Assert.Single(item.Authors));
         Assert.NotNull(item.Series);
         Assert.Equal("777", item.Series!.ProviderSeriesKey);
+        Assert.Equal(MetadataSearchItemKinds.Book, item.Kind);
+        Assert.Null(item.ProviderSeriesKey);
         Assert.Equal("/api/search?q=Dune%20Messiah&author=Frank%20Herbert&page=1", handler.Requests.Single());
     }
 
@@ -211,6 +213,94 @@ public class FantLabMetadataProviderTests
         Assert.NotNull(details.Series);
         Assert.Equal(1, details.Series!.Order);
         Assert.Equal("/api/work/555", handler.Requests.Single());
+    }
+
+    [Fact]
+    public async Task SearchAsync_MapsCycleAsSeriesItem()
+    {
+        var handler = new SequenceHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "matches": [
+                        {
+                          "work_id": 4324,
+                          "rusname": "Хроники Дюны",
+                          "name_show_im": "цикл",
+                          "work_type_id": 4,
+                          "all_autor_name": "Frank Herbert"
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            });
+
+        var provider = CreateProvider(handler, options =>
+        {
+            options.BaseUrl = "http://fantlab.test";
+            options.SearchPath = "/api/search";
+        });
+
+        var result = await provider.SearchAsync(new MetadataSearchRequest("Хроники Дюны", null, 1));
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("4324", item.ProviderBookKey);
+        Assert.Equal(MetadataSearchItemKinds.Series, item.Kind);
+        Assert.Equal("4324", item.ProviderSeriesKey);
+    }
+
+    [Fact]
+    public async Task GetSeriesDetailsAsync_ParsesChildren()
+    {
+        var handler = new SequenceHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "work_id": 4324,
+                      "work_name": "Хроники Дюны",
+                      "children": [
+                        {
+                          "work_id": 4325,
+                          "work_name": "Дюна",
+                          "work_year": 1965,
+                          "authors": [ { "name": "Фрэнк Герберт" } ]
+                        },
+                        {
+                          "work_id": 4326,
+                          "work_name": "Мессия Дюны",
+                          "work_year": 1969,
+                          "authors": [ { "name": "Фрэнк Герберт" } ]
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            });
+
+        var provider = CreateProvider(handler, options =>
+        {
+            options.BaseUrl = "http://fantlab.test";
+            options.BookDetailsPath = "/api/work/{bookKey}";
+        });
+
+        var details = await provider.GetSeriesDetailsAsync("4324");
+
+        Assert.NotNull(details);
+        Assert.Equal("4324", details!.ProviderSeriesKey);
+        Assert.Equal("Хроники Дюны", details.Title);
+        Assert.Equal(2, details.Items.Count);
+        Assert.Equal(1, details.Items[0].Order);
+        Assert.Equal("4325", details.Items[0].ProviderBookKey);
+        Assert.Equal(2, details.Items[1].Order);
+        Assert.Equal("4326", details.Items[1].ProviderBookKey);
+        Assert.Equal("/api/work/4324?children=1", handler.Requests.Single());
     }
 
     [Fact]

@@ -44,15 +44,23 @@ public sealed class BookSearchService : IBookSearchService
         var mappedItems = new List<SearchBookItemDto>(providerResult.Items.Count);
         foreach (var item in providerResult.Items)
         {
-            var catalogBook = await _bookRepository.GetByProviderKeyAsync(
-                provider.ProviderCode,
-                item.ProviderBookKey,
-                cancellationToken);
+            var itemKind = NormalizeItemKind(item.Kind);
+            var isSeriesItem = itemKind.Equals(SearchItemKinds.Series, StringComparison.Ordinal);
 
-            var inCatalog = catalogBook is not null;
-            var catalogState = inCatalog
-                ? catalogBook!.CatalogState.ToString().ToLowerInvariant()
-                : "not_added";
+            var inCatalog = false;
+            var catalogState = "not_added";
+            if (!isSeriesItem)
+            {
+                var catalogBook = await _bookRepository.GetByProviderKeyAsync(
+                    provider.ProviderCode,
+                    item.ProviderBookKey,
+                    cancellationToken);
+
+                inCatalog = catalogBook is not null;
+                catalogState = inCatalog
+                    ? catalogBook!.CatalogState.ToString().ToLowerInvariant()
+                    : "not_added";
+            }
 
             mappedItems.Add(new SearchBookItemDto(
                 ProviderCode: provider.ProviderCode,
@@ -66,13 +74,17 @@ public sealed class BookSearchService : IBookSearchService
                         Title: item.Series.Title,
                         Order: item.Series.Order),
                 InCatalog: inCatalog,
-                CatalogState: catalogState));
+                CatalogState: catalogState,
+                Kind: itemKind,
+                ProviderSeriesKey: isSeriesItem
+                    ? NormalizeOptional(item.ProviderSeriesKey) ?? item.ProviderBookKey
+                    : null));
         }
 
         return new SearchBooksResponse(
             Query: new SearchBooksQuery(Title: normalizedTitle, Author: normalizedAuthor),
             Page: safePage,
-            PageSize: 25,
+            PageSize: 20,
             Total: providerResult.Total,
             Items: mappedItems);
     }
@@ -106,6 +118,47 @@ public sealed class BookSearchService : IBookSearchService
                     Order: details.Series.Order));
     }
 
+    public async Task<SearchSeriesDetailsResponse?> GetSeriesDetailsAsync(
+        string providerCode,
+        string providerSeriesKey,
+        CancellationToken cancellationToken = default)
+    {
+        var provider = GetProvider(providerCode);
+        var normalizedSeriesKey = NormalizeOptional(providerSeriesKey);
+        if (string.IsNullOrWhiteSpace(normalizedSeriesKey))
+        {
+            return null;
+        }
+
+        var details = await provider.GetSeriesDetailsAsync(normalizedSeriesKey, cancellationToken);
+        if (details is null)
+        {
+            return null;
+        }
+
+        var mappedItems = details.Items
+            .OrderBy(x => x.Order)
+            .Select((item, index) => new SearchSeriesBookItemDto(
+                Order: item.Order > 0 ? item.Order : index + 1,
+                ProviderCode: provider.ProviderCode,
+                ProviderBookKey: item.ProviderBookKey,
+                Title: item.Title,
+                Authors: item.Authors,
+                PublishYear: item.PublishYear))
+            .ToArray();
+
+        if (mappedItems.Length == 0)
+        {
+            return null;
+        }
+
+        return new SearchSeriesDetailsResponse(
+            ProviderCode: provider.ProviderCode,
+            ProviderSeriesKey: details.ProviderSeriesKey,
+            Title: details.Title,
+            Items: mappedItems);
+    }
+
     private IMetadataProvider GetProvider(string providerCode)
     {
         if (_providerByCode.TryGetValue(providerCode, out var provider))
@@ -125,5 +178,15 @@ public sealed class BookSearchService : IBookSearchService
 
         var collapsed = string.Join(' ', value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
         return string.IsNullOrWhiteSpace(collapsed) ? null : collapsed;
+    }
+
+    private static string NormalizeItemKind(string? value)
+    {
+        if (value?.Equals(SearchItemKinds.Series, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return SearchItemKinds.Series;
+        }
+
+        return SearchItemKinds.Book;
     }
 }

@@ -208,6 +208,47 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task SeriesDetails_UnsupportedProvider_ReturnsInvalidArgument()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:1");
+
+        var response = await client.GetAsync("/api/v1/search/series/other/77");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("INVALID_ARGUMENT", payload!.Code);
+    }
+
+    [Fact]
+    public async Task SeriesDetails_ReturnsServicePayload()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBookSearchService>();
+                services.AddScoped<IBookSearchService>(_ => new StubBookSearchService());
+            });
+        });
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:1");
+
+        var response = await client.GetAsync("/api/v1/search/series/fantlab/77");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<SearchSeriesDetailsResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("fantlab", payload!.ProviderCode);
+        Assert.Equal("77", payload.ProviderSeriesKey);
+        Assert.Equal(2, payload.Items.Count);
+        Assert.Equal(1, payload.Items[0].Order);
+        Assert.Equal("123", payload.Items[0].ProviderBookKey);
+    }
+
+    [Fact]
     public async Task Candidates_ReturnsServicePayload()
     {
         await using var factory = _factory.WithWebHostBuilder(builder =>
@@ -540,6 +581,61 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             }
 
             return Task.FromResult<DownloadCandidateDto?>(null);
+        }
+    }
+
+    private sealed class StubBookSearchService : IBookSearchService
+    {
+        public Task<SearchBooksResponse> SearchAsync(
+            string? title,
+            string? author,
+            int page,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new SearchBooksResponse(
+                    Query: new SearchBooksQuery(title, author),
+                    Page: page,
+                    PageSize: 20,
+                    Total: 0,
+                    Items: Array.Empty<SearchBookItemDto>()));
+        }
+
+        public Task<SearchBookDetailsResponse?> GetDetailsAsync(
+            string providerCode,
+            string providerBookKey,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<SearchBookDetailsResponse?>(null);
+        }
+
+        public Task<SearchSeriesDetailsResponse?> GetSeriesDetailsAsync(
+            string providerCode,
+            string providerSeriesKey,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<SearchSeriesDetailsResponse?>(
+                new SearchSeriesDetailsResponse(
+                    ProviderCode: providerCode,
+                    ProviderSeriesKey: providerSeriesKey,
+                    Title: "Dune Saga",
+                    Items:
+                    [
+                        new SearchSeriesBookItemDto(
+                            Order: 1,
+                            ProviderCode: providerCode,
+                            ProviderBookKey: "123",
+                            Title: "Dune",
+                            Authors: ["Frank Herbert"],
+                            PublishYear: 1965),
+                        new SearchSeriesBookItemDto(
+                            Order: 2,
+                            ProviderCode: providerCode,
+                            ProviderBookKey: "456",
+                            Title: "Dune Messiah",
+                            Authors: ["Frank Herbert"],
+                            PublishYear: 1969),
+                    ]));
         }
     }
 
