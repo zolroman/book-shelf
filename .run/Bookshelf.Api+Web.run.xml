@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Bookshelf.Api + Bookshelf.Web (http)" type="CompoundRunConfigurationType" factoryName="Compound">
+    <toRun name="Bookshelf.Api: http" type="LaunchSettings" />
+    <toRun name="Bookshelf.Web: http" type="LaunchSettings" />
+    <method v="2" />
+  </configuration>
+</component>
