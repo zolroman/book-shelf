@@ -15,6 +15,7 @@ public static class DependencyInjection
         services.AddScoped<IShelfService, ShelfService>();
         services.AddScoped<ILibraryService, LibraryService>();
         services.AddScoped<IProgressHistoryService, ProgressHistoryService>();
+        services.AddScoped<IBookRatingService, BookRatingService>();
         return services;
     }
 }

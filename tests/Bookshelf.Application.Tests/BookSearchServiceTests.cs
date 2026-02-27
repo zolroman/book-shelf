@@ -119,11 +119,17 @@ public class BookSearchServiceTests
                     PublishYear: 1965,
                     CoverUrl: "https://images.example/dune.jpg",
                     Authors: ["Frank Herbert"],
-                    Series: new MetadataSeriesInfo("77", "Dune Saga", 1)),
+                    Series: new MetadataSeriesInfo("77", "Dune Saga", 1),
+                    WritingYear: 1963,
+                    OverallRating: 8.53m,
+                    Cycle: new MetadataCycleInfo("17877", "Dune Universe")),
             },
         };
 
-        var service = new BookSearchService([provider], new FakeBookRepository());
+        var bookRepository = new FakeBookRepository();
+        var catalogBook = new Book("fantlab", "123", "Dune");
+        bookRepository.Seed(catalogBook, CatalogState.Archive);
+        var service = new BookSearchService([provider], bookRepository);
 
         var details = await service.GetDetailsAsync("fantlab", "123");
         var missing = await service.GetDetailsAsync("fantlab", "missing");
@@ -133,6 +139,12 @@ public class BookSearchServiceTests
         Assert.Equal("123", details.ProviderBookKey);
         Assert.Equal("Dune", details.Title);
         Assert.Equal("Dune Saga", details.Series!.Title);
+        Assert.Equal(1, details.CatalogBookId);
+        Assert.Equal(1963, details.WritingYear);
+        Assert.Equal(8.53m, details.OverallRating);
+        Assert.NotNull(details.Cycle);
+        Assert.Equal("17877", details.Cycle!.ProviderSeriesKey);
+        Assert.Equal("Dune Universe", details.Cycle.Title);
         Assert.Null(missing);
     }
 
@@ -241,6 +253,11 @@ public class BookSearchServiceTests
 
         public void Seed(Book book, CatalogState state)
         {
+            if (book.Id <= 0)
+            {
+                SetProperty(book, nameof(Book.Id), _books.Count + 1L);
+            }
+
             SetProperty(book, nameof(Book.CatalogState), state);
             _books.Add(book);
         }

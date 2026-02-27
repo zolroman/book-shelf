@@ -221,6 +221,118 @@ a:focus-visible {
     line-height: 1.5;
 }
 
+.book-details-header {
+    display: grid;
+    grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.book-cover {
+    width: 100%;
+    border: 1px solid #c5d2cc;
+    border-radius: 0.75rem;
+    object-fit: cover;
+    background: #f4f4ee;
+    box-shadow: 0 8px 20px rgba(20, 55, 67, 0.12);
+}
+
+.book-cover-placeholder {
+    width: 100%;
+    min-height: 220px;
+    border: 1px dashed #9eb2b8;
+    border-radius: 0.75rem;
+    display: grid;
+    place-items: center;
+    color: var(--text-muted);
+    background: #f7f8f3;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.book-details-main {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.book-meta-list {
+    margin: 0;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.book-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: baseline;
+}
+
+.book-meta-row dt {
+    margin: 0;
+    font-weight: 700;
+    color: #1f414b;
+}
+
+.book-meta-row dd {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.book-user-rating {
+    margin-top: 0.25rem;
+    border: 1px solid #d7e0d9;
+    border-radius: 0.7rem;
+    padding: 0.65rem;
+    background: #fffefb;
+}
+
+.book-user-rating-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.book-user-rating-title {
+    font-weight: 700;
+    color: #1f414b;
+}
+
+.star-rating {
+    display: inline-flex;
+    gap: 0.2rem;
+}
+
+.star-button {
+    border: 0;
+    background: transparent;
+    color: #a1aeb3;
+    font-size: 1.5rem;
+    line-height: 1;
+    padding: 0.15rem;
+    min-height: 44px;
+    min-width: 44px;
+    border-radius: 0.35rem;
+    cursor: pointer;
+}
+
+.star-button:hover:not(:disabled),
+.star-button:focus-visible:not(:disabled) {
+    color: #ce8f24;
+    background: rgba(206, 143, 36, 0.12);
+}
+
+.star-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.star-selected {
+    color: #b97913;
+}
+
 .badge {
     display: inline-flex;
     align-items: center;
@@ -411,5 +523,18 @@ a:focus-visible {
     .shelf-add-row {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .book-details-header {
+        grid-template-columns: 1fr;
+    }
+
+    .book-cover {
+        max-width: 220px;
+    }
+
+    .book-meta-row {
+        flex-direction: column;
+        gap: 0.1rem;
     }
 }

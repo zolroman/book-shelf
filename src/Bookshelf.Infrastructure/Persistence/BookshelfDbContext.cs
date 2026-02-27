@@ -61,6 +61,8 @@ public sealed class BookshelfDbContext : DbContext
 
     public DbSet<DownloadJob> DownloadJobs => Set<DownloadJob>();
 
+    public DbSet<BookRating> BookRatings => Set<BookRating>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureBooks(modelBuilder);
@@ -75,6 +77,7 @@ public sealed class BookshelfDbContext : DbContext
         ConfigureProgressSnapshots(modelBuilder);
         ConfigureHistoryEvents(modelBuilder);
         ConfigureDownloadJobs(modelBuilder);
+        ConfigureBookRatings(modelBuilder);
     }
 
     private static void ConfigureBooks(ModelBuilder modelBuilder)
@@ -322,6 +325,30 @@ public sealed class BookshelfDbContext : DbContext
 
         entity.HasOne(x => x.User)
             .WithMany(x => x.DownloadJobs)
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne(x => x.Book)
+            .WithMany()
+            .HasForeignKey(x => x.BookId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureBookRatings(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<BookRating>();
+        entity.ToTable(
+            "book_ratings",
+            table => table.HasCheckConstraint(
+                "ck_book_ratings_rating",
+                "rating >= 1 AND rating <= 5"));
+        entity.HasKey(x => new { x.UserId, x.BookId });
+        entity.Property(x => x.UserId).HasColumnName("user_id");
+        entity.Property(x => x.BookId).HasColumnName("book_id");
+        entity.Property(x => x.Rating).HasColumnName("rating").IsRequired();
+        entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").HasDefaultValueSql("now()");
+        entity.HasIndex(x => x.UserId).HasDatabaseName("ix_book_ratings_user_id");
+        entity.HasOne(x => x.User)
+            .WithMany(x => x.BookRatings)
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasOne(x => x.Book)

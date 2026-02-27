@@ -26,24 +26,89 @@ else if (_details is not null)
                 </a>
             </div>
 
-            <h1>@_details.Title</h1>
-            <p class="result-meta">@string.Join(", ", _details.Authors)</p>
-            @if (!string.IsNullOrWhiteSpace(_details.OriginalTitle))
-            {
-                <p class="result-meta">Original title: @_details.OriginalTitle</p>
-            }
-            @if (_details.PublishYear.HasValue)
-            {
-                <p class="result-meta">Publish year: @_details.PublishYear.Value</p>
-            }
-            @if (_details.Series is not null)
-            {
-                <p class="result-meta">Series: @_details.Series.Title (book @_details.Series.Order)</p>
-            }
-            @if (!string.IsNullOrWhiteSpace(_details.Description))
-            {
-                <p class="detail-description">@_details.Description</p>
-            }
+            <div class="book-details-header">
+                @if (!string.IsNullOrWhiteSpace(_details.CoverUrl))
+                {
+                    <img class="book-cover" src="@_details.CoverUrl" alt="@($"Cover of {_details.Title}")" />
+                }
+                else
+                {
+                    <div class="book-cover-placeholder" aria-hidden="true">No Cover</div>
+                }
+
+                <div class="book-details-main">
+                    <h1>@_details.Title</h1>
+                    <p class="result-meta">@GetAuthorsLabel(_details)</p>
+                    @if (ShouldShowOriginalTitle(_details))
+                    {
+                        <p class="result-meta">Original title: @_details.OriginalTitle</p>
+                    }
+
+                    <dl class="book-meta-list">
+                        <div class="book-meta-row">
+                            <dt>Writing year</dt>
+                            <dd>@GetWritingYearLabel(_details)</dd>
+                        </div>
+                        <div class="book-meta-row">
+                            <dt>Overall rating</dt>
+                            <dd>@GetOverallRatingLabel(_details)</dd>
+                        </div>
+                        @if (TryGetCycleLabel(_details, out var cycleLabel))
+                        {
+                            <div class="book-meta-row">
+                                <dt>Cycle</dt>
+                                <dd>@cycleLabel</dd>
+                            </div>
+                        }
+                    </dl>
+
+                    <div class="book-user-rating">
+                        <div class="book-user-rating-head">
+                            <span class="book-user-rating-title">Your rating</span>
+                            <div class="star-rating" role="group" aria-label="User rating from 1 to 5 stars">
+                                @for (var ratingValue = 1; ratingValue <= 5; ratingValue++)
+                                {
+                                    var localRatingValue = ratingValue;
+                                    <button
+                                        class="@GetStarCssClass(localRatingValue)"
+                                        type="button"
+                                        disabled="@(!CanRate)"
+                                        aria-label="@($"Rate {localRatingValue} star{(localRatingValue == 1 ? string.Empty : "s")}")"
+                                        @onclick="() => SetUserRating(localRatingValue)">
+                                        ★
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="action-row">
+                            <button
+                                class="btn btn-secondary touch-target"
+                                type="button"
+                                disabled="@(!CanClearRating)"
+                                @onclick="ClearUserRating">
+                                Clear rating
+                            </button>
+
+                            @if (_details.CatalogBookId is null)
+                            {
+                                <span class="state-text">User rating is available for books already in Library.</span>
+                            }
+                            else if (OfflineSyncService.IsOffline)
+                            {
+                                <span class="state-text">Rating update requires network.</span>
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(_ratingMessage))
+                        {
+                            <p class="@($"inline-message {_ratingMessageCssClass}")">@_ratingMessage</p>
+                        }
+                    </div>
+
+                    <p class="detail-description">@GetDescriptionLabel(_details)</p>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -124,7 +189,12 @@ else if (_details is not null)
     private string? _error;
     private string? _actionMessage;
     private string _actionMessageCssClass = "inline-message-info";
+    private string? _ratingMessage;
+    private string _ratingMessageCssClass = "inline-message-info";
+    private bool _isRatingSubmitting;
     private readonly Dictionary<string, long> _lastJobByMedia = new(StringComparer.OrdinalIgnoreCase);
+    private bool CanRate => !_isLoading && !_isRatingSubmitting && !OfflineSyncService.IsOffline && _details?.CatalogBookId is long;
+    private bool CanClearRating => CanRate && _details?.UserRating is not null;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -142,6 +212,7 @@ else if (_details is not null)
         _selectedCandidateId = null;
         _lastJob = null;
         _actionMessage = null;
+        _ratingMessage = null;
 
         try
         {
@@ -294,6 +365,62 @@ else if (_details is not null)
         }
     }
 
+    private async Task SetUserRating(int rating)
+    {
+        if (_details?.CatalogBookId is not long bookId || rating is < 1 or > 5)
+        {
+            return;
+        }
+
+        _isRatingSubmitting = true;
+        _ratingMessage = null;
+
+        try
+        {
+            var response = await ApiClient.UpsertBookRatingAsync(bookId, rating);
+            _details = _details with { UserRating = response.Rating };
+            _ratingMessageCssClass = "inline-message-success";
+            _ratingMessage = "Rating saved.";
+        }
+        catch (ApiClientException exception)
+        {
+            _ratingMessageCssClass = "inline-message-error";
+            _ratingMessage = exception.Message;
+        }
+        finally
+        {
+            _isRatingSubmitting = false;
+        }
+    }
+
+    private async Task ClearUserRating()
+    {
+        if (_details?.CatalogBookId is not long bookId)
+        {
+            return;
+        }
+
+        _isRatingSubmitting = true;
+        _ratingMessage = null;
+
+        try
+        {
+            await ApiClient.DeleteBookRatingAsync(bookId);
+            _details = _details with { UserRating = null };
+            _ratingMessageCssClass = "inline-message-success";
+            _ratingMessage = "Rating cleared.";
+        }
+        catch (ApiClientException exception)
+        {
+            _ratingMessageCssClass = "inline-message-error";
+            _ratingMessage = exception.Message;
+        }
+        finally
+        {
+            _isRatingSubmitting = false;
+        }
+    }
+
     private static string FormatSize(long? sizeBytes)
     {
         if (!sizeBytes.HasValue || sizeBytes.Value <= 0)
@@ -314,6 +441,57 @@ else if (_details is not null)
     private string GetBackHref()
     {
         return NormalizeReturnUrl(ReturnUrl) ?? "/search";
+    }
+
+    private static string GetAuthorsLabel(SearchBookDetailsResponse details)
+    {
+        return details.Authors.Count == 0 ? "—" : string.Join(", ", details.Authors);
+    }
+
+    private static bool ShouldShowOriginalTitle(SearchBookDetailsResponse details)
+    {
+        return !string.IsNullOrWhiteSpace(details.OriginalTitle) &&
+            !details.OriginalTitle.Equals(details.Title, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetWritingYearLabel(SearchBookDetailsResponse details)
+    {
+        var year = details.WritingYear ?? details.PublishYear;
+        return year?.ToString() ?? "—";
+    }
+
+    private static string GetOverallRatingLabel(SearchBookDetailsResponse details)
+    {
+        return details.OverallRating.HasValue ? $"{details.OverallRating.Value:F2}" : "—";
+    }
+
+    private static bool TryGetCycleLabel(SearchBookDetailsResponse details, out string? label)
+    {
+        if (details.Cycle is not null && !string.IsNullOrWhiteSpace(details.Cycle.Title))
+        {
+            label = details.Cycle.Title;
+            return true;
+        }
+
+        if (details.Series is not null)
+        {
+            label = $"{details.Series.Title} (book {details.Series.Order})";
+            return true;
+        }
+
+        label = null;
+        return false;
+    }
+
+    private static string GetDescriptionLabel(SearchBookDetailsResponse details)
+    {
+        return string.IsNullOrWhiteSpace(details.Description) ? "—" : details.Description;
+    }
+
+    private string GetStarCssClass(int value)
+    {
+        var selected = _details?.UserRating is int userRating && value <= userRating;
+        return selected ? "star-button star-selected" : "star-button";
     }
 
     private static string? NormalizeReturnUrl(string? returnUrl)

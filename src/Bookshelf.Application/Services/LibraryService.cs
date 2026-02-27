@@ -1,5 +1,7 @@
 using Bookshelf.Application.Abstractions.Persistence;
+using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Abstractions.Services;
+using Bookshelf.Application.Exceptions;
 using Bookshelf.Domain.Enums;
 using Bookshelf.Shared.Contracts.Api;
 
@@ -8,10 +10,20 @@ namespace Bookshelf.Application.Services;
 public sealed class LibraryService : ILibraryService
 {
     private readonly IBookRepository _bookRepository;
+    private readonly IDownloadJobRepository _downloadJobRepository;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IDownloadExecutionClient _downloadExecutionClient;
 
-    public LibraryService(IBookRepository bookRepository)
+    public LibraryService(
+        IBookRepository bookRepository,
+        IDownloadJobRepository downloadJobRepository,
+        IUnitOfWork unitOfWork,
+        IDownloadExecutionClient downloadExecutionClient)
     {
         _bookRepository = bookRepository;
+        _downloadJobRepository = downloadJobRepository;
+        _unitOfWork = unitOfWork;
+        _downloadExecutionClient = downloadExecutionClient;
     }
 
     public async Task<LibraryResponse> ListAsync(
@@ -70,6 +82,64 @@ public sealed class LibraryService : ILibraryService
             .ToArray());
     }
 
+    public async Task ArchiveAsync(
+        long userId,
+        long bookId,
+        CancellationToken cancellationToken = default)
+    {
+        if (userId <= 0)
+        {
+            throw new ArgumentException("userId must be greater than zero.", nameof(userId));
+        }
+
+        if (bookId <= 0)
+        {
+            throw new ArgumentException("bookId must be greater than zero.", nameof(bookId));
+        }
+
+        var book = await _bookRepository.GetByIdAsync(bookId, cancellationToken);
+        if (book is null)
+        {
+            throw new BookIdNotFoundException(bookId);
+        }
+
+        var jobs = await _downloadJobRepository.ListByUserAndBookAsync(userId, bookId, cancellationToken);
+
+        var externalJobIds = jobs
+            .Select(x => x.ExternalJobId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var externalJobId in externalJobIds)
+        {
+            await _downloadExecutionClient.CancelAsync(
+                externalJobId,
+                deleteFiles: true,
+                cancellationToken);
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        foreach (var mediaAsset in book.MediaAssets)
+        {
+            DeleteStorageBestEffort(mediaAsset.StoragePath);
+            mediaAsset.MarkDeleted(MediaAssetStatus.Deleted, nowUtc);
+        }
+
+        book.RecomputeCatalogState();
+        book.Touch(nowUtc);
+        _bookRepository.Update(book);
+
+        foreach (var job in jobs.Where(x => x.Status is DownloadJobStatus.Queued or DownloadJobStatus.Downloading))
+        {
+            job.TransitionTo(DownloadJobStatus.Canceled, nowUtc);
+            _downloadJobRepository.Update(job);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
     private static CatalogState? ParseCatalogState(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -93,5 +163,40 @@ public sealed class LibraryService : ILibraryService
         }
 
         return string.Join(' ', value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static void DeleteStorageBestEffort(string? storagePath)
+    {
+        if (string.IsNullOrWhiteSpace(storagePath))
+        {
+            return;
+        }
+
+        var normalizedPath = storagePath.Trim();
+        try
+        {
+            if (File.Exists(normalizedPath))
+            {
+                File.Delete(normalizedPath);
+                return;
+            }
+
+            if (Directory.Exists(normalizedPath))
+            {
+                Directory.Delete(normalizedPath, recursive: true);
+            }
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
     }
 }

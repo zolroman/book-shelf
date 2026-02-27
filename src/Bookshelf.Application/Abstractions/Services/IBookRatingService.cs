@@ -2,19 +2,20 @@ using Bookshelf.Shared.Contracts.Api;
 
 namespace Bookshelf.Application.Abstractions.Services;
 
-public interface ILibraryService
+public interface IBookRatingService
 {
-    Task<LibraryResponse> ListAsync(
+    Task<int?> GetRatingAsync(
         long userId,
-        bool includeArchived,
-        string? query,
-        string? providerCode,
-        string? catalogState,
-        int page,
-        int pageSize,
+        long bookId,
         CancellationToken cancellationToken = default);
 
-    Task ArchiveAsync(
+    Task<BookUserRatingDto> UpsertAsync(
+        long userId,
+        long bookId,
+        int rating,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteAsync(
         long userId,
         long bookId,
         CancellationToken cancellationToken = default);

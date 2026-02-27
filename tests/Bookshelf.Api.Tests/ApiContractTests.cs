@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Collections.Concurrent;
 using Bookshelf.Application.Abstractions.Services;
 using Bookshelf.Application.Exceptions;
+using Bookshelf.Api.Api.Errors;
 using Bookshelf.Api.Api.Middleware;
 using Bookshelf.Shared.Contracts.Api;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -247,6 +248,115 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task BookRating_Upsert_ReturnsServicePayload()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBookRatingService>();
+                services.AddScoped<IBookRatingService>(_ => new StubBookRatingService());
+            });
+        });
+
+        using var client = CreateAuthenticatedClient(factory, 77);
+
+        var response = await client.PutAsJsonAsync(
+            "/api/v1/books/42/rating",
+            new UpsertBookRatingRequest(5));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<BookUserRatingDto>();
+        Assert.NotNull(payload);
+        Assert.Equal(77, payload!.UserId);
+        Assert.Equal(42, payload.BookId);
+        Assert.Equal(5, payload.Rating);
+    }
+
+    [Fact]
+    public async Task BookRating_Upsert_InvalidPayload_ReturnsInvalidArgument()
+    {
+        using var client = CreateAuthenticatedClient(_factory, 77);
+
+        var response = await client.PutAsJsonAsync(
+            "/api/v1/books/42/rating",
+            new UpsertBookRatingRequest(9));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(ApiErrorCodes.InvalidArgument, payload!.Code);
+    }
+
+    [Fact]
+    public async Task BookRating_Upsert_BookNotFound_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBookRatingService>();
+                services.AddScoped<IBookRatingService>(_ => new ThrowingBookRatingService(new BookIdNotFoundException(42)));
+            });
+        });
+
+        using var client = CreateAuthenticatedClient(factory, 77);
+
+        var response = await client.PutAsJsonAsync(
+            "/api/v1/books/42/rating",
+            new UpsertBookRatingRequest(4));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(ApiErrorCodes.BookNotFound, payload!.Code);
+    }
+
+    [Fact]
+    public async Task BookRating_Delete_ReturnsNoContent()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBookRatingService>();
+                services.AddScoped<IBookRatingService>(_ => new StubBookRatingService());
+            });
+        });
+
+        using var client = CreateAuthenticatedClient(factory, 77);
+
+        var response = await client.DeleteAsync("/api/v1/books/42/rating");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BookDetails_WhenCatalogBookIdPresent_IncludesUserRating()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBookSearchService>();
+                services.RemoveAll<IBookRatingService>();
+                services.AddScoped<IBookSearchService>(_ => new StubBookSearchDetailsService());
+                services.AddScoped<IBookRatingService>(_ => new StubBookRatingService());
+            });
+        });
+
+        using var client = CreateAuthenticatedClient(factory, 77);
+
+        var response = await client.GetAsync("/api/v1/search/books/fantlab/123");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<SearchBookDetailsResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(42, payload!.CatalogBookId);
+        Assert.Equal(5, payload.UserRating);
+    }
+
+    [Fact]
     public async Task Candidates_ReturnsServicePayload()
     {
         await using var factory = _factory.WithWebHostBuilder(builder =>
@@ -453,6 +563,93 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task LibraryArchive_ReturnsNoContent()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ILibraryService>();
+                services.AddScoped<ILibraryService>(_ => new StubLibraryService());
+            });
+        });
+
+        using var client = CreateAuthenticatedClient(factory, 12);
+
+        var response = await client.PostAsync("/api/v1/library/42/archive", content: null);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task LibraryArchive_BookNotFound_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ILibraryService>();
+                services.AddScoped<ILibraryService>(_ => new ThrowingLibraryService(new BookIdNotFoundException(42)));
+            });
+        });
+
+        using var client = CreateAuthenticatedClient(factory, 12);
+
+        var response = await client.PostAsync("/api/v1/library/42/archive", content: null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(ApiErrorCodes.BookNotFound, payload!.Code);
+    }
+
+    [Fact]
+    public async Task LibraryArchive_WhenQBittorrentUnavailable_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ILibraryService>();
+                services.AddScoped<ILibraryService>(_ => new ThrowingLibraryService(
+                    new DownloadExecutionUnavailableException("qbittorrent", "down")));
+            });
+        });
+
+        using var client = CreateAuthenticatedClient(factory, 12);
+
+        var response = await client.PostAsync("/api/v1/library/42/archive", content: null);
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(ApiErrorCodes.QBittorrentUnavailable, payload!.Code);
+    }
+
+    [Fact]
+    public async Task LibraryArchive_WhenCancelFails_ReturnsMappedError()
+    {
+        await using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ILibraryService>();
+                services.AddScoped<ILibraryService>(_ => new ThrowingLibraryService(
+                    new DownloadExecutionFailedException("qbittorrent", "cancel failed")));
+            });
+        });
+
+        using var client = CreateAuthenticatedClient(factory, 12);
+
+        var response = await client.PostAsync("/api/v1/library/42/archive", content: null);
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(ApiErrorCodes.DownloadCancelFailed, payload!.Code);
+    }
+
+    [Fact]
     public async Task Progress_WithoutToken_ReturnsUnauthorized()
     {
         using var client = _factory.CreateClient();
@@ -641,6 +838,116 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         }
     }
 
+    private sealed class StubBookSearchDetailsService : IBookSearchService
+    {
+        public Task<SearchBooksResponse> SearchAsync(
+            string? title,
+            string? author,
+            int page,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new SearchBooksResponse(
+                    Query: new SearchBooksQuery(title, author),
+                    Page: page,
+                    PageSize: 20,
+                    Total: 0,
+                    Items: Array.Empty<SearchBookItemDto>()));
+        }
+
+        public Task<SearchBookDetailsResponse?> GetDetailsAsync(
+            string providerCode,
+            string providerBookKey,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<SearchBookDetailsResponse?>(
+                new SearchBookDetailsResponse(
+                    ProviderCode: providerCode,
+                    ProviderBookKey: providerBookKey,
+                    Title: "Dune",
+                    OriginalTitle: "Dune",
+                    Description: "Sci-fi classic",
+                    PublishYear: 1965,
+                    CoverUrl: "https://images.example/dune.jpg",
+                    Authors: ["Frank Herbert"],
+                    Series: new SearchSeriesDto("77", "Dune Saga", 1),
+                    CatalogBookId: 42,
+                    WritingYear: 1963,
+                    OverallRating: 8.53m,
+                    Cycle: new SearchCycleDto("17877", "Dune Universe")));
+        }
+
+        public Task<SearchSeriesDetailsResponse?> GetSeriesDetailsAsync(
+            string providerCode,
+            string providerSeriesKey,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<SearchSeriesDetailsResponse?>(null);
+        }
+    }
+
+    private sealed class StubBookRatingService : IBookRatingService
+    {
+        public Task<int?> GetRatingAsync(long userId, long bookId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<int?>(5);
+        }
+
+        public Task<BookUserRatingDto> UpsertAsync(
+            long userId,
+            long bookId,
+            int rating,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new BookUserRatingDto(
+                    UserId: userId,
+                    BookId: bookId,
+                    Rating: rating,
+                    UpdatedAtUtc: DateTimeOffset.UtcNow));
+        }
+
+        public Task DeleteAsync(
+            long userId,
+            long bookId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingBookRatingService : IBookRatingService
+    {
+        private readonly Exception _exception;
+
+        public ThrowingBookRatingService(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public Task<int?> GetRatingAsync(long userId, long bookId, CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
+        public Task<BookUserRatingDto> UpsertAsync(
+            long userId,
+            long bookId,
+            int rating,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
+        public Task DeleteAsync(
+            long userId,
+            long bookId,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+    }
+
     private sealed class ThrowingCandidateDiscoveryService : ICandidateDiscoveryService
     {
         private readonly Exception _exception;
@@ -766,6 +1073,45 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
                             CreatedAtUtc: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
                             UpdatedAtUtc: new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero)),
                     ]));
+        }
+
+        public Task ArchiveAsync(
+            long userId,
+            long bookId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingLibraryService : ILibraryService
+    {
+        private readonly Exception _exception;
+
+        public ThrowingLibraryService(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public Task<LibraryResponse> ListAsync(
+            long userId,
+            bool includeArchived,
+            string? query,
+            string? providerCode,
+            string? catalogState,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
+        public Task ArchiveAsync(
+            long userId,
+            long bookId,
+            CancellationToken cancellationToken = default)
+        {
+            throw _exception;
         }
     }
 

@@ -174,7 +174,7 @@ public class FantLabMetadataProviderTests
     }
 
     [Fact]
-    public async Task GetDetailsAsync_ParsesAuthorsAndSeries()
+    public async Task GetDetailsAsync_ParsesExtendedDetailsPayload()
     {
         var handler = new SequenceHttpHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
@@ -184,11 +184,14 @@ public class FantLabMetadataProviderTests
                     {
                       "item": {
                         "id": "555",
-                        "title": "Dune",
-                        "originalTitle": "Dune",
-                        "description": "Sci-fi classic",
+                        "work_name": "Dune",
+                        "work_name_orig": "Dune",
+                        "work_description": "Sci-fi classic",
                         "publishYear": 1965,
-                        "coverUrl": "https://images.example/dune.jpg",
+                        "work_year_of_write": 1963,
+                        "image": "/images/dune.jpg",
+                        "rating": { "true_rating": "8.53", "rating": "8.61", "voters": 1000 },
+                        "work_root_saga": [ { "work_id": "17877", "work_name": "Dune Universe" } ],
                         "authors": [ { "name": "Frank Herbert" } ],
                         "series": { "id": "10", "title": "Dune", "order": 1 }
                       }
@@ -212,7 +215,45 @@ public class FantLabMetadataProviderTests
         Assert.Equal("Frank Herbert", Assert.Single(details.Authors));
         Assert.NotNull(details.Series);
         Assert.Equal(1, details.Series!.Order);
+        Assert.Equal("http://fantlab.test/images/dune.jpg", details.CoverUrl);
+        Assert.Equal(1963, details.WritingYear);
+        Assert.Equal(8.53m, details.OverallRating);
+        Assert.NotNull(details.Cycle);
+        Assert.Equal("17877", details.Cycle!.ProviderSeriesKey);
+        Assert.Equal("Dune Universe", details.Cycle.Title);
         Assert.Equal("/api/work/555", handler.Requests.Single());
+    }
+
+    [Fact]
+    public async Task GetDetailsAsync_NormalizesCoverHost_FromApiFantLabToFantLab()
+    {
+        var handler = new SequenceHttpHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "item": {
+                        "id": "555",
+                        "work_name": "Dune",
+                        "image": "/images/dune.jpg"
+                      }
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            });
+
+        var provider = CreateProvider(handler, options =>
+        {
+            options.BaseUrl = "https://api.fantlab.ru";
+            options.BookDetailsPath = "/api/work/{bookKey}";
+        });
+
+        var details = await provider.GetDetailsAsync("555");
+
+        Assert.NotNull(details);
+        Assert.Equal("https://fantlab.ru/images/dune.jpg", details!.CoverUrl);
     }
 
     [Fact]

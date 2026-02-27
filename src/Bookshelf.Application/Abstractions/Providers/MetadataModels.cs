@@ -16,6 +16,10 @@ public sealed record MetadataSeriesInfo(
     string Title,
     int Order);
 
+public sealed record MetadataCycleInfo(
+    string ProviderSeriesKey,
+    string Title);
+
 public sealed record MetadataSearchItem(
     string ProviderBookKey,
     string Title,
@@ -36,7 +40,10 @@ public sealed record MetadataBookDetails(
     int? PublishYear,
     string? CoverUrl,
     IReadOnlyList<string> Authors,
-    MetadataSeriesInfo? Series);
+    MetadataSeriesInfo? Series,
+    int? WritingYear = null,
+    decimal? OverallRating = null,
+    MetadataCycleInfo? Cycle = null);
 
 public sealed record MetadataSeriesBookItem(
     int Order,

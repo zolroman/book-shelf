@@ -106,6 +106,7 @@ public static class DependencyInjection
         services.AddScoped<IDownloadJobRepository, DownloadJobRepository>();
         services.AddScoped<IProgressSnapshotRepository, ProgressSnapshotRepository>();
         services.AddScoped<IHistoryEventRepository, HistoryEventRepository>();
+        services.AddScoped<IBookRatingRepository, BookRatingRepository>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 
         return services;

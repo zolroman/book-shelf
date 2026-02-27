@@ -37,6 +37,8 @@ public sealed class User
 
     public ICollection<DownloadJob> DownloadJobs { get; } = new List<DownloadJob>();
 
+    public ICollection<BookRating> BookRatings { get; } = new List<BookRating>();
+
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -59,6 +59,10 @@ public interface IBookshelfApiClient
         int pageSize = 20,
         CancellationToken cancellationToken = default);
 
+    Task ArchiveBookAsync(
+        long bookId,
+        CancellationToken cancellationToken = default);
+
     Task<ShelvesResponse> GetShelvesAsync(CancellationToken cancellationToken = default);
 
     Task<CreateShelfResponse> CreateShelfAsync(string name, CancellationToken cancellationToken = default);
@@ -70,6 +74,15 @@ public interface IBookshelfApiClient
 
     Task RemoveBookFromShelfAsync(
         long shelfId,
+        long bookId,
+        CancellationToken cancellationToken = default);
+
+    Task<BookUserRatingDto> UpsertBookRatingAsync(
+        long bookId,
+        int rating,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteBookRatingAsync(
         long bookId,
         CancellationToken cancellationToken = default);
 

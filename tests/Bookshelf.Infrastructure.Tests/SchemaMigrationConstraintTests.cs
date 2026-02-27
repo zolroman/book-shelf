@@ -67,15 +67,65 @@ public class SchemaMigrationConstraintTests
         Assert.Contains("progress_percent", checkConstraint!.Sql, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void BookRatings_HasPrimaryKeyAndRangeConstraint()
+    {
+        var migrationBuilder = BuildMigration();
+
+        var table = Assert.Single(
+            migrationBuilder.Operations.OfType<CreateTableOperation>(),
+            x => x.Name == "book_ratings");
+
+        var primaryKey = table.PrimaryKey;
+        Assert.NotNull(primaryKey);
+        Assert.Equal(new[] { "user_id", "book_id" }, primaryKey!.Columns);
+        var checkConstraint = Assert.Single(
+            table.CheckConstraints,
+            x => x.Name == "ck_book_ratings_rating");
+        Assert.Contains("rating", checkConstraint!.Sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AddBookRatings_CreatesRatingTableWithCheckConstraint()
+    {
+        var migrationBuilder = BuildBookRatingsMigration();
+
+        var table = Assert.Single(
+            migrationBuilder.Operations.OfType<CreateTableOperation>(),
+            x => x.Name == "book_ratings");
+        var checkConstraint = Assert.Single(
+            table.CheckConstraints,
+            x => x.Name == "ck_book_ratings_rating");
+        Assert.Contains("rating", checkConstraint!.Sql, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static MigrationBuilder BuildMigration()
     {
-        var migration = new InitialCreateProxy();
+        var migrationBuilder = new MigrationBuilder(activeProvider: "Npgsql.EntityFrameworkCore.PostgreSQL");
+        var initialCreate = new InitialCreateProxy();
+        var addBookRatings = new AddBookRatingsProxy();
+        initialCreate.ApplyUp(migrationBuilder);
+        addBookRatings.ApplyUp(migrationBuilder);
+        return migrationBuilder;
+    }
+
+    private sealed class InitialCreateProxy : InitialCreate
+    {
+        public void ApplyUp(MigrationBuilder builder)
+        {
+            Up(builder);
+        }
+    }
+
+    private static MigrationBuilder BuildBookRatingsMigration()
+    {
+        var migration = new AddBookRatingsProxy();
         var migrationBuilder = new MigrationBuilder(activeProvider: "Npgsql.EntityFrameworkCore.PostgreSQL");
         migration.ApplyUp(migrationBuilder);
         return migrationBuilder;
     }
 
-    private sealed class InitialCreateProxy : InitialCreate
+    private sealed class AddBookRatingsProxy : AddBookRatings
     {
         public void ApplyUp(MigrationBuilder builder)
         {

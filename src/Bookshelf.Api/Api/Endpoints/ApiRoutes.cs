@@ -1,3 +1,4 @@
+using Bookshelf.Api.Api.Endpoints.Books;
 using Bookshelf.Api.Api.Endpoints.DownloadJobs;
 using Bookshelf.Api.Api.Endpoints.History;
 using Bookshelf.Api.Api.Endpoints.Library;
@@ -18,7 +19,9 @@ public static class ApiRoutes
         v1.MapSearchBookDetailsEndpoint();
         v1.MapSearchSeriesDetailsEndpoint();
         v1.MapSearchBookCandidatesEndpoint();
+        v1.MapBookRatingsEndpoints();
         v1.MapGetLibraryEndpoint();
+        v1.MapArchiveLibraryBookEndpoint();
         v1.MapAddAndDownloadEndpoint();
         v1.MapUpsertProgressEndpoint();
         v1.MapListProgressEndpoint();

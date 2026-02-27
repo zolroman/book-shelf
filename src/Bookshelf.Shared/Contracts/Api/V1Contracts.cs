@@ -21,6 +21,10 @@ public sealed record SearchSeriesDto(
     string Title,
     int Order);
 
+public sealed record SearchCycleDto(
+    string ProviderSeriesKey,
+    string Title);
+
 public sealed record SearchBookItemDto(
     string ProviderCode,
     string ProviderBookKey,
@@ -48,7 +52,12 @@ public sealed record SearchBookDetailsResponse(
     int? PublishYear,
     string? CoverUrl,
     IReadOnlyList<string> Authors,
-    SearchSeriesDto? Series);
+    SearchSeriesDto? Series,
+    long? CatalogBookId = null,
+    int? WritingYear = null,
+    decimal? OverallRating = null,
+    SearchCycleDto? Cycle = null,
+    int? UserRating = null);
 
 public sealed record SearchSeriesBookItemDto(
     int Order,
@@ -217,3 +226,12 @@ public sealed record AddBookToShelfRequest(
 
 public sealed record AddBookToShelfResponse(
     ShelfDto Shelf);
+
+public sealed record UpsertBookRatingRequest(
+    int Rating);
+
+public sealed record BookUserRatingDto(
+    long UserId,
+    long BookId,
+    int Rating,
+    DateTimeOffset UpdatedAtUtc);

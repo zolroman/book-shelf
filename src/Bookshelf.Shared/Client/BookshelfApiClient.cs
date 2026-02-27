@@ -162,6 +162,14 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
         return SendAsync<LibraryResponse>(request, cancellationToken);
     }
 
+    public Task ArchiveBookAsync(
+        long bookId,
+        CancellationToken cancellationToken = default)
+    {
+        var request = CreateRequest(HttpMethod.Post, $"/api/v1/library/{bookId}/archive");
+        return SendWithoutPayloadAsync(request, cancellationToken);
+    }
+
     public Task<ShelvesResponse> GetShelvesAsync(CancellationToken cancellationToken = default)
     {
         var request = CreateRequest(HttpMethod.Get, "/api/v1/shelves");
@@ -192,6 +200,24 @@ public sealed class BookshelfApiClient : IBookshelfApiClient
     {
         var request = CreateRequest(HttpMethod.Delete, $"/api/v1/shelves/{shelfId}/books/{bookId}");
         await SendWithoutPayloadAsync(request, cancellationToken);
+    }
+
+    public Task<BookUserRatingDto> UpsertBookRatingAsync(
+        long bookId,
+        int rating,
+        CancellationToken cancellationToken = default)
+    {
+        var request = CreateRequest(HttpMethod.Put, $"/api/v1/books/{bookId}/rating");
+        request.Content = Serialize(new UpsertBookRatingRequest(rating));
+        return SendAsync<BookUserRatingDto>(request, cancellationToken);
+    }
+
+    public Task DeleteBookRatingAsync(
+        long bookId,
+        CancellationToken cancellationToken = default)
+    {
+        var request = CreateRequest(HttpMethod.Delete, $"/api/v1/books/{bookId}/rating");
+        return SendWithoutPayloadAsync(request, cancellationToken);
     }
 
     public Task<ProgressSnapshotDto> UpsertProgressAsync(

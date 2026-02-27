@@ -430,6 +430,19 @@ public class AddAndDownloadServiceTests
             return Task.FromResult(items);
         }
 
+        public Task<IReadOnlyList<DownloadJob>> ListByUserAndBookAsync(
+            long userId,
+            long bookId,
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<DownloadJob> items = Jobs
+                .Where(x => x.UserId == userId && x.BookId == bookId)
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .ToArray();
+
+            return Task.FromResult(items);
+        }
+
         public Task<int> CountByUserAsync(
             long userId,
             DownloadJobStatus? status,

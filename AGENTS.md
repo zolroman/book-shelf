@@ -2,6 +2,7 @@
 - prefer CLI to MCP
 - use skills
 - use MCP if needed
+- use Sub-agents. only 1 write-heavy sub-agent can be active in the same time.
 
 ## Agent Configuration
 - Source of truth is [`/.codex/config.toml`](./.codex/config.toml).
@@ -63,7 +64,7 @@
 - `dotnet test tests/Bookshelf.Infrastructure.Tests/Bookshelf.Infrastructure.Tests.csproj --no-restore`
 - `dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj --no-restore`
 - `dotnet run --project src/Bookshelf.Api/Bookshelf.Api.csproj` runs the API locally.
-- `dotnet ef database update --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj` applies migrations.
+- `BOOKSHELF_CONNECTION_STRING='Host=host.docker.internal;Port=5432;Database=bookshelf;Username=bookshelf;Password=bookshelf' dotnet ef database update --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj` applies migrations (design-time requires `BOOKSHELF_CONNECTION_STRING`).
 
 ## Coding Style & Naming Conventions
 - C# style is enforced in build: nullable enabled, analyzers enabled, warnings treated as errors (`Directory.Build.props`).

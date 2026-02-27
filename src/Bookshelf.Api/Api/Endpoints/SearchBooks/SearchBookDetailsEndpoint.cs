@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using Bookshelf.Api.Api.Endpoints.Common;
 using Bookshelf.Api.Api.Errors;
 using Bookshelf.Application.Abstractions.Services;
@@ -19,7 +20,9 @@ public static class SearchBookDetailsEndpoint
     private static async Task<IResult> Handle(
         string providerCode,
         string providerBookKey,
+        ClaimsPrincipal user,
         IBookSearchService searchService,
+        IBookRatingService bookRatingService,
         CancellationToken cancellationToken)
     {
         EndpointGuards.EnsureRequired(providerCode, nameof(providerCode));
@@ -34,17 +37,24 @@ public static class SearchBookDetailsEndpoint
 
         try
         {
-            var response = await searchService.GetDetailsAsync(
+            var details = await searchService.GetDetailsAsync(
                 providerCode,
                 providerBookKey,
                 cancellationToken);
 
-            if (response is null)
+            if (details is null)
             {
                 throw new ApiException(
                     ApiErrorCodes.BookNotFound,
                     "Book was not found in metadata provider.",
                     HttpStatusCode.NotFound);
+            }
+
+            var response = details;
+            if (details.CatalogBookId is long catalogBookId)
+            {
+                var userRating = await bookRatingService.GetRatingAsync(user.Id, catalogBookId, cancellationToken);
+                response = details with { UserRating = userRating };
             }
 
             return Results.Ok(response);

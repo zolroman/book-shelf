@@ -101,6 +101,11 @@ public sealed class BookSearchService : IBookSearchService
             return null;
         }
 
+        var catalogBook = await _bookRepository.GetByProviderKeyAsync(
+            provider.ProviderCode,
+            details.ProviderBookKey,
+            cancellationToken);
+
         return new SearchBookDetailsResponse(
             ProviderCode: provider.ProviderCode,
             ProviderBookKey: details.ProviderBookKey,
@@ -115,7 +120,15 @@ public sealed class BookSearchService : IBookSearchService
                 : new SearchSeriesDto(
                     ProviderSeriesKey: details.Series.ProviderSeriesKey,
                     Title: details.Series.Title,
-                    Order: details.Series.Order));
+                    Order: details.Series.Order),
+            CatalogBookId: catalogBook?.Id,
+            WritingYear: details.WritingYear,
+            OverallRating: details.OverallRating,
+            Cycle: details.Cycle is null
+                ? null
+                : new SearchCycleDto(
+                    ProviderSeriesKey: details.Cycle.ProviderSeriesKey,
+                    Title: details.Cycle.Title));
     }
 
     public async Task<SearchSeriesDetailsResponse?> GetSeriesDetailsAsync(

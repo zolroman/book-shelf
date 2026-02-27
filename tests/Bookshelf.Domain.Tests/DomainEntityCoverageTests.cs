@@ -26,6 +26,22 @@ public class DomainEntityCoverageTests
     }
 
     [Fact]
+    public void BookRating_ValidatesRange_AndUpdatesTimestamp()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BookRating(1, 2, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BookRating(1, 2, 6));
+
+        var rating = new BookRating(1, 2, 4);
+        var updatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(1);
+        rating.Update(5, updatedAtUtc);
+
+        Assert.Equal(1, rating.UserId);
+        Assert.Equal(2, rating.BookId);
+        Assert.Equal(5, rating.Rating);
+        Assert.Equal(updatedAtUtc, rating.UpdatedAtUtc);
+    }
+
+    [Fact]
     public void HistoryEvent_NormalizesPositionRef()
     {
         var eventWithPosition = new HistoryEvent(

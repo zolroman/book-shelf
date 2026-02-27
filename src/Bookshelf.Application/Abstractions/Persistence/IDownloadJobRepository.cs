@@ -20,6 +20,11 @@ public interface IDownloadJobRepository
         int pageSize,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<DownloadJob>> ListByUserAndBookAsync(
+        long userId,
+        long bookId,
+        CancellationToken cancellationToken = default);
+
     Task<int> CountByUserAsync(
         long userId,
         DownloadJobStatus? status,

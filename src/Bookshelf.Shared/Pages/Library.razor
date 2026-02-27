@@ -72,7 +72,7 @@ else if (_library is not null)
             {
                 <li class="result-card">
                     <div class="result-main">
-                        <div class="result-title">@book.Title</div>
+                        <a class="result-title" href="@BuildBookDetailsHref(book)">@book.Title</a>
                         <div class="result-meta">@book.ProviderCode/@book.ProviderBookKey | @book.CatalogState</div>
                         @if (!string.IsNullOrWhiteSpace(book.Description))
                         {
@@ -94,6 +94,13 @@ else if (_library is not null)
                             disabled="@(!book.HasAudioMedia)"
                             @onclick="() => OpenPlayer(book.Id)">
                             Listen
+                        </button>
+                        <button
+                            class="btn btn-danger touch-target"
+                            type="button"
+                            disabled="@IsArchiveDisabled(book)"
+                            @onclick="() => ArchiveBookAsync(book)">
+                            @GetArchiveButtonText(book)
                         </button>
 
                         <div class="shelf-add-row">
@@ -148,6 +155,7 @@ else if (_library is not null)
     private string? _providerCode;
     private string? _catalogState;
     private readonly Dictionary<long, string?> _shelfSelectionByBook = [];
+    private readonly HashSet<long> _archivingBookIds = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -246,6 +254,39 @@ else if (_library is not null)
         }
     }
 
+    private async Task ArchiveBookAsync(LibraryBookDto book)
+    {
+        if (IsArchived(book) || !_archivingBookIds.Add(book.Id))
+        {
+            return;
+        }
+
+        _message = null;
+        _error = null;
+
+        try
+        {
+            await ApiClient.ArchiveBookAsync(book.Id);
+            await LoadAsync(showLoading: false, page: _page);
+            if (_library is not null && _library.Items.Count == 0 && _page > 1)
+            {
+                await LoadAsync(showLoading: false, page: _page - 1);
+            }
+
+            _messageCssClass = "inline-message-success";
+            _message = $"\"{book.Title}\" moved to archive.";
+        }
+        catch (ApiClientException exception)
+        {
+            _messageCssClass = "inline-message-error";
+            _message = exception.Message;
+        }
+        finally
+        {
+            _archivingBookIds.Remove(book.Id);
+        }
+    }
+
     private void OpenReader(long bookId)
     {
         NavigationManager.NavigateTo($"/reader/{bookId}");
@@ -254,5 +295,76 @@ else if (_library is not null)
     private void OpenPlayer(long bookId)
     {
         NavigationManager.NavigateTo($"/player/{bookId}");
+    }
+
+    private bool IsArchiveDisabled(LibraryBookDto book)
+    {
+        return IsArchived(book) || _archivingBookIds.Contains(book.Id);
+    }
+
+    private string GetArchiveButtonText(LibraryBookDto book)
+    {
+        if (_archivingBookIds.Contains(book.Id))
+        {
+            return "Archiving...";
+        }
+
+        return IsArchived(book) ? "Archived" : "Archive";
+    }
+
+    private string BuildBookDetailsHref(LibraryBookDto book)
+    {
+        var returnUrl = BuildLibraryUrl(
+            _includeArchived,
+            _query,
+            _providerCode,
+            _catalogState,
+            _library?.Page ?? _page);
+
+        return $"/books/{Uri.EscapeDataString(book.ProviderCode)}/{Uri.EscapeDataString(book.ProviderBookKey)}?returnUrl={Uri.EscapeDataString(returnUrl)}";
+    }
+
+    private static string BuildLibraryUrl(
+        bool includeArchived,
+        string? query,
+        string? providerCode,
+        string? catalogState,
+        int page)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var queryString = BuildQuery(
+            ("includeArchived", includeArchived.ToString().ToLowerInvariant()),
+            ("query", NormalizeOptional(query)),
+            ("providerCode", NormalizeOptional(providerCode)),
+            ("catalogState", NormalizeOptional(catalogState)),
+            ("page", safePage.ToString()));
+
+        return $"/library{queryString}";
+    }
+
+    private static string BuildQuery(params (string Key, string? Value)[] values)
+    {
+        var items = values
+            .Where(x => !string.IsNullOrWhiteSpace(x.Value))
+            .Select(x => $"{Uri.EscapeDataString(x.Key)}={Uri.EscapeDataString(x.Value!)}")
+            .ToArray();
+
+        return items.Length == 0 ? string.Empty : $"?{string.Join("&", items)}";
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var collapsed = string.Join(' ', value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        return string.IsNullOrWhiteSpace(collapsed) ? null : collapsed;
+    }
+
+    private static bool IsArchived(LibraryBookDto book)
+    {
+        return string.Equals(book.CatalogState, "archive", StringComparison.OrdinalIgnoreCase);
     }
 }

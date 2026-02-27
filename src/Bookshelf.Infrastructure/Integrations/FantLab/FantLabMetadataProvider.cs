@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Bookshelf.Application.Abstractions.Providers;
@@ -320,7 +321,7 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         }
 
         var providerBookKey = GetStringValue(node, "providerBookKey", "bookId", "work_id", "workId", "id") ?? requestedBookKey;
-        var title = GetStringValue(node, "title", "name", "work_name", "workName");
+        var title = GetStringValue(node, "work_name", "title", "name", "workName");
         if (string.IsNullOrWhiteSpace(title))
         {
             return null;
@@ -328,16 +329,22 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
         var authors = GetStringList(node, "authors", "author", "writers");
         var series = ParseSeries(node);
+        var cycle = ParseCycle(node);
+        var overallRating = ParseOverallRating(node);
+        var coverUrl = NormalizeCoverUrl(GetStringValue(node, "coverUrl", "cover", "image", "cover_url", "image_preview"));
 
         return new MetadataBookDetails(
             ProviderBookKey: providerBookKey,
             Title: title,
-            OriginalTitle: GetStringValue(node, "originalTitle", "orig_title", "original_name"),
-            Description: GetStringValue(node, "description", "annotation", "about"),
-            PublishYear: GetIntValue(node, "publishYear", "year", "publicationYear"),
-            CoverUrl: GetStringValue(node, "coverUrl", "cover", "image", "cover_url"),
+            OriginalTitle: GetStringValue(node, "work_name_orig", "originalTitle", "orig_title", "original_name"),
+            Description: GetStringValue(node, "work_description", "description", "annotation", "about"),
+            PublishYear: GetIntValue(node, "publishYear", "year", "publicationYear", "work_year"),
+            CoverUrl: coverUrl,
             Authors: authors,
-            Series: series);
+            Series: series,
+            WritingYear: GetIntValue(node, "work_year_of_write", "work_year"),
+            OverallRating: overallRating,
+            Cycle: cycle);
     }
 
     private MetadataSeriesDetails? ParseSeriesDetailsPayload(string payload, string requestedSeriesKey)
@@ -441,6 +448,58 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         }
 
         return null;
+    }
+
+    private static MetadataCycleInfo? ParseCycle(JsonElement node)
+    {
+        if (!TryGetProperty(node, out var rootSagaNode, "work_root_saga") ||
+            rootSagaNode.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var item in rootSagaNode.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var key = GetStringValue(item, "providerSeriesKey", "work_id", "id", "series_id", "seriesId");
+            var title = GetStringValue(item, "title", "work_name", "name");
+            if (!string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(title))
+            {
+                return new MetadataCycleInfo(key, title);
+            }
+        }
+
+        return null;
+    }
+
+    private static decimal? ParseOverallRating(JsonElement node)
+    {
+        if (TryGetProperty(node, out var ratingNode, "rating") && ratingNode.ValueKind == JsonValueKind.Object)
+        {
+            var trueRating = GetDecimalValue(ratingNode, "true_rating");
+            if (trueRating.HasValue)
+            {
+                return trueRating.Value;
+            }
+
+            var rating = GetDecimalValue(ratingNode, "rating");
+            if (rating.HasValue)
+            {
+                return rating.Value;
+            }
+        }
+
+        var weighted = GetDecimalValue(node, "val_midmark_by_weight");
+        if (weighted.HasValue)
+        {
+            return weighted.Value;
+        }
+
+        return GetDecimalValue(node, "val_midmark");
     }
 
     private static bool IsSeriesSearchItem(FantLabSearchItemContract node)
@@ -615,6 +674,36 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
         if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var parsed))
         {
             return parsed;
+        }
+
+        return null;
+    }
+
+    private static decimal? GetDecimalValue(JsonElement node, params string[] names)
+    {
+        if (!TryGetProperty(node, out var value, names))
+        {
+            return null;
+        }
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var numeric))
+        {
+            return numeric;
+        }
+
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var text = value.GetString();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            var normalized = text.Trim().Replace(',', '.');
+            if (decimal.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
         }
 
         return null;
@@ -1065,6 +1154,44 @@ public sealed class FantLabMetadataProvider : IMetadataProvider
 
         [JsonPropertyName("seriesList")]
         public JsonElement SeriesListCamel { get; init; }
+    }
+
+    private string? NormalizeCoverUrl(string? value)
+    {
+        var normalized = NormalizeDisplayText(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var absolute) &&
+            (absolute.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             absolute.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            return NormalizeFantLabCoverHost(absolute).ToString();
+        }
+
+        if (_httpClient.BaseAddress is not null &&
+            Uri.TryCreate(_httpClient.BaseAddress, normalized, out var relativeResolved))
+        {
+            return NormalizeFantLabCoverHost(relativeResolved).ToString();
+        }
+
+        return normalized;
+    }
+
+    private static Uri NormalizeFantLabCoverHost(Uri uri)
+    {
+        if (!uri.Host.Equals("api.fantlab.ru", StringComparison.OrdinalIgnoreCase))
+        {
+            return uri;
+        }
+
+        var builder = new UriBuilder(uri)
+        {
+            Host = "fantlab.ru",
+        };
+        return builder.Uri;
     }
 
     private static string? NormalizeDisplayText(string? value)

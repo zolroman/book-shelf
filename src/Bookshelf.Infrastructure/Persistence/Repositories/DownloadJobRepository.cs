@@ -59,6 +59,17 @@ public sealed class DownloadJobRepository : IDownloadJobRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<DownloadJob>> ListByUserAndBookAsync(
+        long userId,
+        long bookId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.DownloadJobs
+            .Where(x => x.UserId == userId && x.BookId == bookId)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<int> CountByUserAsync(
         long userId,
         DownloadJobStatus? status,

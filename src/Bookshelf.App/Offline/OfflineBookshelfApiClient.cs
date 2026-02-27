@@ -266,6 +266,18 @@ public sealed class OfflineBookshelfApiClient : IBookshelfApiClient
         throw CreateNetworkRequiredException();
     }
 
+    public Task ArchiveBookAsync(
+        long bookId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_connectivityState.IsOnline)
+        {
+            throw CreateNetworkRequiredException();
+        }
+
+        return _remoteClient.ArchiveBookAsync(bookId, cancellationToken);
+    }
+
     public async Task<ShelvesResponse> GetShelvesAsync(CancellationToken cancellationToken = default)
     {
         var key = $"shelves:{_sessionState.UserId}";
@@ -326,6 +338,31 @@ public sealed class OfflineBookshelfApiClient : IBookshelfApiClient
         }
 
         return _remoteClient.RemoveBookFromShelfAsync(shelfId, bookId, cancellationToken);
+    }
+
+    public Task<BookUserRatingDto> UpsertBookRatingAsync(
+        long bookId,
+        int rating,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_connectivityState.IsOnline)
+        {
+            throw CreateNetworkRequiredException();
+        }
+
+        return _remoteClient.UpsertBookRatingAsync(bookId, rating, cancellationToken);
+    }
+
+    public Task DeleteBookRatingAsync(
+        long bookId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_connectivityState.IsOnline)
+        {
+            throw CreateNetworkRequiredException();
+        }
+
+        return _remoteClient.DeleteBookRatingAsync(bookId, cancellationToken);
     }
 
     public async Task<ProgressSnapshotDto> UpsertProgressAsync(
