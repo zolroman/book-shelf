@@ -2,6 +2,7 @@ using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Abstractions.Persistence;
 using Bookshelf.Infrastructure.Integrations;
 using Bookshelf.Infrastructure.Integrations.FantLab;
+using Bookshelf.Infrastructure.Integrations.Flibusta;
 using Bookshelf.Infrastructure.Integrations.Jackett;
 using Bookshelf.Infrastructure.Integrations.QBittorrent;
 using Bookshelf.Infrastructure.Persistence;
@@ -63,6 +64,15 @@ public static class DependencyInjection
             options.RetryDelayMs = GetInt(configuration, "JACKETT_RETRY_DELAY_MS", "Jackett:RetryDelayMs", 300);
             options.MaxItems = GetInt(configuration, "JACKETT_MAX_ITEMS", "Jackett:MaxItems", 50);
         });
+        services.Configure<FlibustaOptions>(options =>
+        {
+            options.BaseUrl = GetString(configuration, "FLIBUSTA_BASE_URL", "Flibusta:BaseUrl", "http://flibusta.site");
+            options.TimeoutSeconds = GetInt(configuration, "FLIBUSTA_TIMEOUT_SECONDS", "Flibusta:TimeoutSeconds", 15);
+            options.MaxRetries = GetInt(configuration, "FLIBUSTA_MAX_RETRIES", "Flibusta:MaxRetries", 2);
+            options.RetryDelayMs = GetInt(configuration, "FLIBUSTA_RETRY_DELAY_MS", "Flibusta:RetryDelayMs", 300);
+            options.MaxItems = GetInt(configuration, "FLIBUSTA_MAX_ITEMS", "Flibusta:MaxItems", 20);
+            options.MaxPages = GetInt(configuration, "FLIBUSTA_MAX_PAGES", "Flibusta:MaxPages", 5);
+        });
         services.Configure<QBittorrentOptions>(options =>
         {
             options.BaseUrl = GetString(configuration, "QBITTORRENT_BASE_URL", "QBittorrent:BaseUrl", "http://192.168.40.25:8070");
@@ -87,6 +97,12 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
         }).AddHttpMessageHandler<CorrelationIdPropagationHandler>();
+        services.AddHttpClient<FlibustaCandidateProvider>((serviceProvider, client) =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<FlibustaOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds));
+        }).AddHttpMessageHandler<CorrelationIdPropagationHandler>();
         services.AddHttpClient<QBittorrentDownloadClient>((serviceProvider, client) =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<QBittorrentOptions>>().Value;
@@ -97,6 +113,8 @@ public static class DependencyInjection
             serviceProvider.GetRequiredService<FantLabMetadataProvider>());
         services.AddScoped<IDownloadCandidateProvider>(serviceProvider =>
             serviceProvider.GetRequiredService<JackettCandidateProvider>());
+        services.AddScoped<IDownloadCandidateProvider>(serviceProvider =>
+            serviceProvider.GetRequiredService<FlibustaCandidateProvider>());
         services.AddScoped<IDownloadExecutionClient>(serviceProvider =>
             serviceProvider.GetRequiredService<QBittorrentDownloadClient>());
 

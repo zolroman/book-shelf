@@ -114,6 +114,14 @@ public sealed class LibraryService : ILibraryService
 
         foreach (var externalJobId in externalJobIds)
         {
+            var matchingJob = jobs.FirstOrDefault(x =>
+                string.Equals(x.ExternalJobId, externalJobId, StringComparison.OrdinalIgnoreCase));
+            if (matchingJob is null ||
+                !matchingJob.ExecutionProvider.Equals("qbittorrent", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             await _downloadExecutionClient.CancelAsync(
                 externalJobId,
                 deleteFiles: true,

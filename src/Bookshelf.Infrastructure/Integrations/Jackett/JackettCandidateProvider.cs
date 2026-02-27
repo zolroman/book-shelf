@@ -40,8 +40,14 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
 
     public string ProviderCode => "jackett";
 
+    public string ProviderName => "Jackett";
+
+    public IReadOnlyCollection<string> SupportedMediaTypes => ["text", "audio"];
+
+    public int Priority => 200;
+
     public async Task<IReadOnlyList<DownloadCandidateRaw>> SearchAsync(
-        string query,
+        DownloadCandidateSearchRequest request,
         int maxItems,
         CancellationToken cancellationToken = default)
     {
@@ -50,7 +56,7 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
             throw new DownloadCandidateProviderUnavailableException(ProviderCode, "Jackett API key is not configured.");
         }
 
-        var uri = BuildUri(query);
+        var uri = BuildUri(request.Query);
         var payload = await SendWithRetryAsync(uri, cancellationToken);
         var parsed = ParsePayload(payload);
         var limit = Math.Min(Math.Max(1, maxItems), Math.Max(1, _options.MaxItems));
@@ -186,7 +192,10 @@ public sealed class JackettCandidateProvider : IDownloadCandidateProvider
                 Seeders: item.Seeders,
                 SizeBytes: item.Size,
                 PublishedAtUtc: item.PublishDate?.ToUniversalTime(),
-                UniqueIdentifier: uniqueIdentifier));
+                UniqueIdentifier: uniqueIdentifier,
+                SourceProviderCode: ProviderCode,
+                SourceProviderName: ProviderName,
+                ExecutionProviderCode: "qbittorrent"));
         }
 
         return candidates;

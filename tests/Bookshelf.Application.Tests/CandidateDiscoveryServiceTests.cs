@@ -107,8 +107,8 @@ public class CandidateDiscoveryServiceTests
         var response = await service.FindAsync("fantlab", "123", "audio", 1, 20);
 
         Assert.Equal(2, response.Total);
-        Assert.Contains(response.Items, x => x.CandidateId == "guid:first");
-        Assert.Contains(response.Items, x => x.CandidateId == "guid:second");
+        Assert.Contains(response.Items, x => x.CandidateId == "jackett:guid:first");
+        Assert.Contains(response.Items, x => x.CandidateId == "jackett:guid:second");
     }
 
     private static ICandidateDiscoveryService CreateService(IReadOnlyList<DownloadCandidateRaw> candidates)
@@ -145,7 +145,10 @@ public class CandidateDiscoveryServiceTests
             seeders,
             sizeBytes,
             publishedAtUtc,
-            uniqueIdentifier ?? $"{downloadUri}|{sourceUrl}");
+            uniqueIdentifier ?? $"{downloadUri}|{sourceUrl}",
+            SourceProviderCode: "jackett",
+            SourceProviderName: "Jackett",
+            ExecutionProviderCode: "qbittorrent");
     }
 
     private sealed class FakeCandidateProvider : IDownloadCandidateProvider
@@ -159,8 +162,14 @@ public class CandidateDiscoveryServiceTests
 
         public string ProviderCode => "jackett";
 
+        public string ProviderName => "Jackett";
+
+        public IReadOnlyCollection<string> SupportedMediaTypes => ["text", "audio"];
+
+        public int Priority => 200;
+
         public Task<IReadOnlyList<DownloadCandidateRaw>> SearchAsync(
-            string query,
+            DownloadCandidateSearchRequest request,
             int maxItems,
             CancellationToken cancellationToken = default)
         {

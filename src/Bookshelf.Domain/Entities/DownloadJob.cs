@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Bookshelf.Domain.Enums;
 
 namespace Bookshelf.Domain.Entities;
@@ -17,17 +18,41 @@ public sealed class DownloadJob
     }
 
     public DownloadJob(long userId, long bookId, MediaType mediaType, string source, string? torrentMagnet)
+        : this(userId, bookId, mediaType, source, torrentMagnet, "jackett", "qbittorrent")
+    {
+    }
+
+    public DownloadJob(
+        long userId,
+        long bookId,
+        MediaType mediaType,
+        string source,
+        string? downloadUri,
+        string sourceProvider,
+        string executionProvider)
     {
         if (string.IsNullOrWhiteSpace(source))
         {
             throw new ArgumentException("Download source is required.", nameof(source));
         }
 
+        if (string.IsNullOrWhiteSpace(sourceProvider))
+        {
+            throw new ArgumentException("Source provider is required.", nameof(sourceProvider));
+        }
+
+        if (string.IsNullOrWhiteSpace(executionProvider))
+        {
+            throw new ArgumentException("Execution provider is required.", nameof(executionProvider));
+        }
+
         UserId = userId;
         BookId = bookId;
         MediaType = mediaType;
         Source = source.Trim();
-        TorrentMagnet = NormalizeOptional(torrentMagnet);
+        DownloadUri = NormalizeOptional(downloadUri);
+        SourceProvider = sourceProvider.Trim();
+        ExecutionProvider = executionProvider.Trim();
         Status = DownloadJobStatus.Queued;
         var nowUtc = DateTimeOffset.UtcNow;
         CreatedAtUtc = nowUtc;
@@ -48,9 +73,16 @@ public sealed class DownloadJob
 
     public string Source { get; private set; } = string.Empty;
 
+    public string SourceProvider { get; private set; } = "jackett";
+
+    public string ExecutionProvider { get; private set; } = "qbittorrent";
+
     public string? ExternalJobId { get; private set; }
 
-    public string? TorrentMagnet { get; private set; }
+    public string? DownloadUri { get; private set; }
+
+    [NotMapped]
+    public string? TorrentMagnet => DownloadUri;
 
     public DownloadJobStatus Status { get; private set; }
 

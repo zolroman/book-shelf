@@ -60,9 +60,19 @@ public static class SearchBookCandidatesEndpoint
         catch (DownloadCandidateProviderUnavailableException exception)
         {
             throw new ApiException(
-                ApiErrorCodes.JackettUnavailable,
+                MapCandidateProviderErrorCode(exception.ProviderCode),
                 $"Candidate provider '{exception.ProviderCode}' is unavailable.",
                 HttpStatusCode.BadGateway);
         }
+    }
+
+    private static string MapCandidateProviderErrorCode(string providerCode)
+    {
+        return providerCode.Trim().ToLowerInvariant() switch
+        {
+            "jackett" => ApiErrorCodes.JackettUnavailable,
+            "flibusta" => ApiErrorCodes.FlibustaUnavailable,
+            _ => ApiErrorCodes.CandidateProviderUnavailable,
+        };
     }
 }

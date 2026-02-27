@@ -4,11 +4,21 @@ public interface IDownloadCandidateProvider
 {
     string ProviderCode { get; }
 
+    string ProviderName { get; }
+
+    IReadOnlyCollection<string> SupportedMediaTypes { get; }
+
+    int Priority { get; }
+
     Task<IReadOnlyList<DownloadCandidateRaw>> SearchAsync(
-        string query,
+        DownloadCandidateSearchRequest request,
         int maxItems,
         CancellationToken cancellationToken = default);
 }
+
+public sealed record DownloadCandidateSearchRequest(
+    string Query,
+    string? AuthorFilter = null);
 
 public sealed record DownloadCandidateRaw(
     string Title,
@@ -17,4 +27,7 @@ public sealed record DownloadCandidateRaw(
     int? Seeders,
     long? SizeBytes,
     DateTimeOffset? PublishedAtUtc,
-    string UniqueIdentifier = "");
+    string UniqueIdentifier = "",
+    string SourceProviderCode = "",
+    string SourceProviderName = "",
+    string ExecutionProviderCode = "");

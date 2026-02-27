@@ -103,6 +103,34 @@ public class AddAndDownloadServiceTests
         Assert.Equal("enqueue_unavailable", job.FailureReason);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_FlibustaCandidate_CreatesQueuedLocalJobWithoutQbittorrentEnqueue()
+    {
+        var details = BuildDetails();
+        var candidate = BuildFlibustaCandidate();
+        var fixture = CreateFixture(details, candidate);
+
+        var response = await fixture.Service.ExecuteAsync(
+            new AddAndDownloadRequest(11, "fantlab", "123", "text", candidate.CandidateId));
+
+        Assert.Equal("queued", response.DownloadJob.Status);
+        Assert.Equal(candidate.CandidateId, response.DownloadJob.ExternalJobId);
+        Assert.Equal(0, fixture.DownloadExecutionClient.EnqueueCalls);
+
+        var book = Assert.Single(fixture.BookRepository.Books);
+        var media = Assert.Single(book.MediaAssets);
+        Assert.Equal(MediaType.Text, media.MediaType);
+        Assert.Equal("flibusta", media.SourceProvider);
+        Assert.Equal(MediaAssetStatus.Missing, media.Status);
+
+        var job = Assert.Single(fixture.JobRepository.Jobs);
+        Assert.Equal("flibusta", job.SourceProvider);
+        Assert.Equal("local-http-epub", job.ExecutionProvider);
+        Assert.Equal(candidate.DownloadUri, job.DownloadUri);
+        Assert.Equal(candidate.CandidateId, job.ExternalJobId);
+        Assert.Equal(DownloadJobStatus.Queued, job.Status);
+    }
+
     private static TestFixture CreateFixture(
         SearchBookDetailsResponse details,
         DownloadCandidateDto? candidate,
@@ -143,7 +171,23 @@ public class AddAndDownloadServiceTests
             DownloadUri: "magnet:?xt=urn:btih:abc123hash",
             SourceUrl: "https://tracker.example/item/1",
             Seeders: 50,
-            SizeBytes: 734003200);
+            SizeBytes: 734003200,
+            SourceProviderCode: "jackett",
+            SourceProviderName: "Jackett");
+    }
+
+    private static DownloadCandidateDto BuildFlibustaCandidate()
+    {
+        return new DownloadCandidateDto(
+            CandidateId: "flibusta:659810:epub",
+            MediaType: "text",
+            Title: "Dune [EPUB]",
+            DownloadUri: "http://flibusta.site/b/659810/epub",
+            SourceUrl: "http://flibusta.site/b/659810",
+            Seeders: null,
+            SizeBytes: 1024 * 1024,
+            SourceProviderCode: "flibusta",
+            SourceProviderName: "Flibusta");
     }
 
     private static void SetId<T>(T entity, long id)
@@ -260,10 +304,22 @@ public class AddAndDownloadServiceTests
                     page,
                     pageSize,
                     items.Length,
-                    items));
+                    items,
+                    items.Length == 0
+                        ? Array.Empty<DownloadCandidateGroupDto>()
+                        : new[]
+                        {
+                            new DownloadCandidateGroupDto(
+                                SourceProviderCode: items[0].SourceProviderCode,
+                                SourceProviderName: items[0].SourceProviderName,
+                                Total: items.Length,
+                                ErrorCode: null,
+                                ErrorMessage: null,
+                                Items: items),
+                        }));
         }
 
-        public Task<DownloadCandidateDto?> ResolveAsync(
+        public Task<ResolvedDownloadCandidate?> ResolveAsync(
             string providerCode,
             string providerBookKey,
             string mediaType,
@@ -273,10 +329,23 @@ public class AddAndDownloadServiceTests
             if (_candidate is not null &&
                 _candidate.CandidateId.Equals(candidateId, StringComparison.OrdinalIgnoreCase))
             {
-                return Task.FromResult<DownloadCandidateDto?>(_candidate);
+                return Task.FromResult<ResolvedDownloadCandidate?>(
+                    new ResolvedDownloadCandidate(
+                        CandidateId: _candidate.CandidateId,
+                        MediaType: _candidate.MediaType,
+                        Title: _candidate.Title,
+                        DownloadUri: _candidate.DownloadUri,
+                        SourceUrl: _candidate.SourceUrl,
+                        SourceProviderCode: _candidate.SourceProviderCode,
+                        SourceProviderName: _candidate.SourceProviderName,
+                        ExecutionProviderCode: _candidate.CandidateId.StartsWith("flibusta:", StringComparison.OrdinalIgnoreCase)
+                            ? "local-http-epub"
+                            : "qbittorrent",
+                        Seeders: _candidate.Seeders,
+                        SizeBytes: _candidate.SizeBytes));
             }
 
-            return Task.FromResult<DownloadCandidateDto?>(null);
+            return Task.FromResult<ResolvedDownloadCandidate?>(null);
         }
     }
 

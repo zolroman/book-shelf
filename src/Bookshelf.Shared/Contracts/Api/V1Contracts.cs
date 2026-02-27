@@ -80,7 +80,17 @@ public sealed record DownloadCandidateDto(
     string DownloadUri,
     string SourceUrl,
     int? Seeders,
-    long? SizeBytes);
+    long? SizeBytes,
+    string SourceProviderCode = "",
+    string SourceProviderName = "");
+
+public sealed record DownloadCandidateGroupDto(
+    string SourceProviderCode,
+    string SourceProviderName,
+    int Total,
+    string? ErrorCode,
+    string? ErrorMessage,
+    IReadOnlyList<DownloadCandidateDto> Items);
 
 public sealed record DownloadCandidatesResponse(
     string ProviderCode,
@@ -89,7 +99,8 @@ public sealed record DownloadCandidatesResponse(
     int Page,
     int PageSize,
     int Total,
-    IReadOnlyList<DownloadCandidateDto> Items);
+    IReadOnlyList<DownloadCandidateDto> Items,
+    IReadOnlyList<DownloadCandidateGroupDto>? Groups = null);
 
 public sealed record LibraryBookDto(
     long Id,

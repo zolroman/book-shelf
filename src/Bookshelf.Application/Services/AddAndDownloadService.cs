@@ -10,7 +10,7 @@ namespace Bookshelf.Application.Services;
 
 public sealed class AddAndDownloadService : IAddAndDownloadService
 {
-    private const string JackettSourceProvider = "jackett";
+    private const string LocalHttpExecutionProvider = "local-http-epub";
 
     private readonly IBookSearchService _bookSearchService;
     private readonly ICandidateDiscoveryService _candidateDiscoveryService;
@@ -68,6 +68,13 @@ public sealed class AddAndDownloadService : IAddAndDownloadService
             throw new DownloadCandidateNotFoundException(candidateId);
         }
 
+        var sourceProviderCode = string.IsNullOrWhiteSpace(candidate.SourceProviderCode)
+            ? "jackett"
+            : candidate.SourceProviderCode;
+        var executionProviderCode = string.IsNullOrWhiteSpace(candidate.ExecutionProviderCode)
+            ? "qbittorrent"
+            : candidate.ExecutionProviderCode;
+
         var book = await _bookRepository.GetByProviderKeyAsync(
             providerCode,
             providerBookKey,
@@ -92,7 +99,7 @@ public sealed class AddAndDownloadService : IAddAndDownloadService
         }
 
         await UpsertBookMetadataAsync(book, details, cancellationToken);
-        EnsureMediaSlot(book, mediaType, candidate.SourceUrl);
+        EnsureMediaSlot(book, mediaType, candidate.SourceUrl, sourceProviderCode);
         book.RecomputeCatalogState();
         _bookRepository.Update(book);
 
@@ -114,7 +121,9 @@ public sealed class AddAndDownloadService : IAddAndDownloadService
             book.Id,
             mediaType,
             candidate.SourceUrl,
-            candidate.DownloadUri);
+            candidate.DownloadUri,
+            sourceProviderCode,
+            executionProviderCode);
 
         await _downloadJobRepository.AddAsync(job, cancellationToken);
         try
@@ -134,6 +143,15 @@ public sealed class AddAndDownloadService : IAddAndDownloadService
             }
 
             throw;
+        }
+
+        if (executionProviderCode.Equals(LocalHttpExecutionProvider, StringComparison.OrdinalIgnoreCase))
+        {
+            var nowUtc = DateTimeOffset.UtcNow;
+            job.SetExternalJobId(candidate.CandidateId, nowUtc);
+            _downloadJobRepository.Update(job);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return BuildResponse(book, job);
         }
 
         try
@@ -256,10 +274,10 @@ public sealed class AddAndDownloadService : IAddAndDownloadService
         _bookRepository.Update(book);
     }
 
-    private static void EnsureMediaSlot(Book book, MediaType mediaType, string sourceUrl)
+    private static void EnsureMediaSlot(Book book, MediaType mediaType, string sourceUrl, string sourceProvider)
     {
         var existing = book.MediaAssets.SingleOrDefault(x => x.MediaType == mediaType);
-        var asset = book.UpsertMediaAsset(mediaType, sourceUrl, JackettSourceProvider);
+        var asset = book.UpsertMediaAsset(mediaType, sourceUrl, sourceProvider);
         if (existing is null)
         {
             asset.MarkDeleted(MediaAssetStatus.Missing, DateTimeOffset.UtcNow);

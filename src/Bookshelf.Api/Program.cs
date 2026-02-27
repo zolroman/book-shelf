@@ -11,6 +11,7 @@ using Bookshelf.Api.Api.HealthChecks;
 using Bookshelf.Api.Api.Middleware;
 using Bookshelf.Infrastructure;
 using Bookshelf.Infrastructure.Integrations.FantLab;
+using Bookshelf.Infrastructure.Integrations.Flibusta;
 using Bookshelf.Infrastructure.Integrations.Jackett;
 using Bookshelf.Infrastructure.Integrations.QBittorrent;
 using Bookshelf.Shared.Contracts.Api;
@@ -30,6 +31,7 @@ builder.Logging.AddConsole();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddOpenApi();
+builder.Services.Configure<DirectDownloadOptions>(builder.Configuration.GetSection("DirectDownloads"));
 builder.Services
     .AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy("API is running."), tags: ["live"])
@@ -37,6 +39,7 @@ builder.Services
 builder.Services.AddBookshelfApplication();
 builder.Services.AddBookshelfInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<DownloadJobSyncWorker>();
+builder.Services.AddHostedService<FlibustaTextDownloadWorker>();
 builder.Services
     .AddAuthentication("Bearer")
     .AddScheme<AuthenticationSchemeOptions, BearerTokenAuthenticationHandler>("Bearer", _ => { });
@@ -184,6 +187,7 @@ static void ConfigureOpenTelemetry(
                     RequestLoggingMiddleware.MeterName,
                     DownloadJobService.MeterName,
                     FantLabMetadataProvider.MeterName,
+                    FlibustaCandidateProvider.MeterName,
                     JackettCandidateProvider.MeterName,
                     QBittorrentDownloadClient.MeterName);
 

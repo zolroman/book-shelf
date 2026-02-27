@@ -17,7 +17,9 @@ public static class ApiErrorCodes
     public const string ShelfBookExists = "SHELF_BOOK_EXISTS";
 
     public const string FantlabUnavailable = "FANTLAB_UNAVAILABLE";
+    public const string FlibustaUnavailable = "FLIBUSTA_UNAVAILABLE";
     public const string JackettUnavailable = "JACKETT_UNAVAILABLE";
+    public const string CandidateProviderUnavailable = "CANDIDATE_PROVIDER_UNAVAILABLE";
     public const string QBittorrentUnavailable = "QBITTORRENT_UNAVAILABLE";
     public const string QBittorrentEnqueueFailed = "QBITTORRENT_ENQUEUE_FAILED";
     public const string QBittorrentStatusFailed = "QBITTORRENT_STATUS_FAILED";

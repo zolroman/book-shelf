@@ -748,11 +748,35 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
                             "magnet:?xt=urn:btih:abc123",
                             "https://tracker.example/item/123",
                             52,
-                            734003200),
+                            734003200,
+                            "jackett",
+                            "Jackett"),
+                    },
+                    new[]
+                    {
+                        new DownloadCandidateGroupDto(
+                            SourceProviderCode: "jackett",
+                            SourceProviderName: "Jackett",
+                            Total: 1,
+                            ErrorCode: null,
+                            ErrorMessage: null,
+                            Items:
+                            [
+                                new DownloadCandidateDto(
+                                    "jackett:abc123",
+                                    "audio",
+                                    "Dune Audiobook",
+                                    "magnet:?xt=urn:btih:abc123",
+                                    "https://tracker.example/item/123",
+                                    52,
+                                    734003200,
+                                    "jackett",
+                                    "Jackett"),
+                            ]),
                     }));
         }
 
-        public Task<DownloadCandidateDto?> ResolveAsync(
+        public Task<ResolvedDownloadCandidate?> ResolveAsync(
             string providerCode,
             string providerBookKey,
             string mediaType,
@@ -761,18 +785,21 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
         {
             if (candidateId.Equals("jackett:abc123", StringComparison.OrdinalIgnoreCase))
             {
-                return Task.FromResult<DownloadCandidateDto?>(
-                    new DownloadCandidateDto(
+                return Task.FromResult<ResolvedDownloadCandidate?>(
+                    new ResolvedDownloadCandidate(
                         "jackett:abc123",
                         "audio",
                         "Dune Audiobook",
                         "magnet:?xt=urn:btih:abc123",
                         "https://tracker.example/item/123",
+                        "jackett",
+                        "Jackett",
+                        "qbittorrent",
                         52,
                         734003200));
             }
 
-            return Task.FromResult<DownloadCandidateDto?>(null);
+            return Task.FromResult<ResolvedDownloadCandidate?>(null);
         }
     }
 
@@ -968,7 +995,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             throw _exception;
         }
 
-        public Task<DownloadCandidateDto?> ResolveAsync(
+        public Task<ResolvedDownloadCandidate?> ResolveAsync(
             string providerCode,
             string providerBookKey,
             string mediaType,

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Bookshelf.Application.Abstractions.Providers;
 using Bookshelf.Application.Exceptions;
 using Bookshelf.Infrastructure.Integrations.Jackett;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -62,7 +63,7 @@ public class JackettCandidateProviderTests
             options.MaxItems = 50;
         });
 
-        var response = await provider.SearchAsync(" Dune   Herbert ", 50);
+        var response = await provider.SearchAsync(new DownloadCandidateSearchRequest(" Dune   Herbert "), 50);
 
         Assert.Equal(
             "/api/v2.0/indexers/all/results?apikey=test-key&Query=Dune%20Herbert",
@@ -116,7 +117,7 @@ public class JackettCandidateProviderTests
             options.RetryDelayMs = 1;
         });
 
-        var response = await provider.SearchAsync("Dune", 50);
+        var response = await provider.SearchAsync(new DownloadCandidateSearchRequest("Dune"), 50);
 
         Assert.Single(response);
         Assert.Equal(2, handler.Requests.Count);
@@ -138,7 +139,7 @@ public class JackettCandidateProviderTests
         });
 
         await Assert.ThrowsAsync<DownloadCandidateProviderUnavailableException>(
-            async () => await provider.SearchAsync("Dune", 10));
+            async () => await provider.SearchAsync(new DownloadCandidateSearchRequest("Dune"), 10));
         Assert.Empty(handler.Requests);
     }
 

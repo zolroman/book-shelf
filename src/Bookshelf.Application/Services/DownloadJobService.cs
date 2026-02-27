@@ -11,6 +11,7 @@ namespace Bookshelf.Application.Services;
 
 public sealed class DownloadJobService : IDownloadJobService
 {
+    private const string QBittorrentExecutionProvider = "qbittorrent";
     public const string MeterName = "Bookshelf.Application.DownloadSync";
 
     private static readonly Meter Meter = new(MeterName);
@@ -74,7 +75,8 @@ public sealed class DownloadJobService : IDownloadJobService
             return null;
         }
 
-        if (IsActive(job.Status))
+        if (IsActive(job.Status) &&
+            job.ExecutionProvider.Equals(QBittorrentExecutionProvider, StringComparison.OrdinalIgnoreCase))
         {
             await SyncSingleAsync(job, cancellationToken);
             job = await _downloadJobRepository.GetByIdAsync(jobId, cancellationToken);
@@ -105,10 +107,13 @@ public sealed class DownloadJobService : IDownloadJobService
 
         if (!string.IsNullOrWhiteSpace(job.ExternalJobId))
         {
-            await _downloadExecutionClient.CancelAsync(
-                job.ExternalJobId,
-                deleteFiles: false,
-                cancellationToken);
+            if (job.ExecutionProvider.Equals(QBittorrentExecutionProvider, StringComparison.OrdinalIgnoreCase))
+            {
+                await _downloadExecutionClient.CancelAsync(
+                    job.ExternalJobId,
+                    deleteFiles: false,
+                    cancellationToken);
+            }
         }
 
         var nowUtc = DateTimeOffset.UtcNow;
@@ -128,6 +133,11 @@ public sealed class DownloadJobService : IDownloadJobService
 
         foreach (var job in jobs)
         {
+            if (!job.ExecutionProvider.Equals(QBittorrentExecutionProvider, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var previousStatus = job.Status;
             var previousFailureReason = job.FailureReason;
             var lagSeconds = Math.Max(0, (DateTimeOffset.UtcNow - job.UpdatedAtUtc).TotalSeconds);
@@ -273,7 +283,7 @@ public sealed class DownloadJobService : IDownloadJobService
             return;
         }
 
-        var asset = book.UpsertMediaAsset(job.MediaType, job.Source, "jackett");
+        var asset = book.UpsertMediaAsset(job.MediaType, job.Source, job.SourceProvider);
         var storagePath = !string.IsNullOrWhiteSpace(status.StoragePath)
             ? status.StoragePath
             : $"downloads/{job.ExternalJobId ?? job.Id.ToString()}";

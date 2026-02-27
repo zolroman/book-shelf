@@ -262,6 +262,51 @@ public class DownloadJobServiceTests
             async () => await fixture.Service.CancelAsync(6, 10));
     }
 
+    [Fact]
+    public async Task SyncActiveAsync_LocalHttpJob_IsIgnoredByQbittorrentSync()
+    {
+        var fixture = CreateFixture();
+        var job = new DownloadJob(
+            userId: 10,
+            bookId: 100,
+            mediaType: MediaType.Text,
+            source: "https://source/item/7",
+            downloadUri: "http://flibusta.site/b/7/epub",
+            sourceProvider: "flibusta",
+            executionProvider: "local-http-epub");
+        SetId(job, 7);
+        job.SetExternalJobId("flibusta:7:epub", DateTimeOffset.UtcNow);
+        fixture.JobRepository.Jobs.Add(job);
+
+        await fixture.Service.SyncActiveAsync();
+
+        Assert.Equal(DownloadJobStatus.Queued, job.Status);
+        Assert.Equal(0, fixture.ExecutionClient.GetStatusCalls);
+        Assert.Empty(fixture.ExecutionClient.CancelCalls);
+    }
+
+    [Fact]
+    public async Task CancelAsync_LocalHttpJob_DoesNotCallQbittorrentCancel()
+    {
+        var fixture = CreateFixture();
+        var job = new DownloadJob(
+            userId: 10,
+            bookId: 100,
+            mediaType: MediaType.Text,
+            source: "https://source/item/8",
+            downloadUri: "http://flibusta.site/b/8/epub",
+            sourceProvider: "flibusta",
+            executionProvider: "local-http-epub");
+        SetId(job, 8);
+        job.SetExternalJobId("flibusta:8:epub", DateTimeOffset.UtcNow);
+        fixture.JobRepository.Jobs.Add(job);
+
+        var canceled = await fixture.Service.CancelAsync(8, 10);
+
+        Assert.Equal("canceled", canceled.Status);
+        Assert.Empty(fixture.ExecutionClient.CancelCalls);
+    }
+
     private static TestFixture CreateFixture()
     {
         var jobRepository = new FakeDownloadJobRepository();
@@ -508,6 +553,8 @@ public class DownloadJobServiceTests
 
         public List<(string ExternalJobId, bool DeleteFiles)> CancelCalls { get; } = new();
 
+        public int GetStatusCalls { get; private set; }
+
         public TimeSpan NotFoundGracePeriod { get; set; } = TimeSpan.FromSeconds(60);
 
         public Task<DownloadEnqueueResult> EnqueueAsync(
@@ -522,6 +569,7 @@ public class DownloadJobServiceTests
             string externalJobId,
             CancellationToken cancellationToken = default)
         {
+            GetStatusCalls++;
             if (StatusByExternalId.TryGetValue(externalJobId, out var status))
             {
                 return Task.FromResult(status);

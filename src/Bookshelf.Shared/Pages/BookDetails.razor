@@ -130,7 +130,7 @@ else if (_details is not null)
                 </div>
             </div>
 
-            @if ((_textCandidates?.Items.Count ?? 0) == 0 && (_audioCandidates?.Items.Count ?? 0) == 0)
+            @if (!HasAnyCandidateGroups(_textCandidates) && !HasAnyCandidateGroups(_audioCandidates))
             {
                 <p class="state-text">No download options found</p>
             }
@@ -226,7 +226,8 @@ else if (_details is not null)
                     Page: 1,
                     PageSize: 20,
                     Total: 0,
-                    Items: Array.Empty<DownloadCandidateDto>());
+                    Items: Array.Empty<DownloadCandidateDto>(),
+                    Groups: Array.Empty<DownloadCandidateGroupDto>());
                 _audioCandidates = new DownloadCandidatesResponse(
                     ProviderCode,
                     ProviderBookKey,
@@ -234,7 +235,8 @@ else if (_details is not null)
                     Page: 1,
                     PageSize: 20,
                     Total: 0,
-                    Items: Array.Empty<DownloadCandidateDto>());
+                    Items: Array.Empty<DownloadCandidateDto>(),
+                    Groups: Array.Empty<DownloadCandidateGroupDto>());
             }
             else
             {
@@ -263,62 +265,102 @@ else if (_details is not null)
             return;
         }
 
-        if (response.Items.Count == 0)
+        var groups = response.Groups ?? Array.Empty<DownloadCandidateGroupDto>();
+        if (groups.Count == 0)
         {
             builder.AddMarkupContent(1, "<p class=\"state-text\">No options</p>");
             return;
         }
 
         var index = 2;
-        builder.OpenElement(index++, "ul");
-        builder.AddAttribute(index++, "class", "candidate-list");
-
-        foreach (var item in response.Items)
+        foreach (var group in groups)
         {
-            var inputId = $"candidate-{mediaType}-{item.CandidateId.Replace(':', '-')}";
-            builder.OpenElement(index++, "li");
-            builder.AddAttribute(index++, "class", "candidate-item");
+            builder.OpenElement(index++, "section");
+            builder.AddAttribute(index++, "class", "candidate-provider-group");
 
-            builder.OpenElement(index++, "input");
-            builder.AddAttribute(index++, "type", "radio");
-            builder.AddAttribute(index++, "name", "selectedCandidate");
-            builder.AddAttribute(index++, "id", inputId);
-            builder.AddAttribute(index++, "value", item.CandidateId);
-            builder.AddAttribute(index++, "checked", _selectedCandidateId == item.CandidateId);
-            builder.AddAttribute(index++, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, _ =>
+            builder.OpenElement(index++, "h4");
+            builder.AddContent(index++, group.SourceProviderName);
+            builder.CloseElement();
+
+            if (!string.IsNullOrWhiteSpace(group.ErrorMessage))
             {
-                _selectedCandidateId = item.CandidateId;
-                _selectedMediaType = mediaType;
-            }));
-            builder.CloseElement();
+                builder.OpenElement(index++, "p");
+                builder.AddAttribute(index++, "class", "inline-message inline-message-error");
+                builder.AddContent(index++, group.ErrorMessage);
+                builder.CloseElement();
+            }
+            else if (group.Items.Count == 0)
+            {
+                builder.OpenElement(index++, "p");
+                builder.AddAttribute(index++, "class", "state-text");
+                builder.AddContent(index++, "No options");
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.OpenElement(index++, "ul");
+                builder.AddAttribute(index++, "class", "candidate-list");
 
-            builder.OpenElement(index++, "label");
-            builder.AddAttribute(index++, "for", inputId);
-            builder.AddAttribute(index++, "class", "candidate-label");
+                foreach (var item in group.Items)
+                {
+                    var inputId = $"candidate-{mediaType}-{item.CandidateId.Replace(':', '-')}";
+                    builder.OpenElement(index++, "li");
+                    builder.AddAttribute(index++, "class", "candidate-item");
 
-            builder.OpenElement(index++, "span");
-            builder.AddAttribute(index++, "class", "candidate-title");
-            builder.AddContent(index++, item.Title);
-            builder.CloseElement();
+                    builder.OpenElement(index++, "input");
+                    builder.AddAttribute(index++, "type", "radio");
+                    builder.AddAttribute(index++, "name", "selectedCandidate");
+                    builder.AddAttribute(index++, "id", inputId);
+                    builder.AddAttribute(index++, "value", item.CandidateId);
+                    builder.AddAttribute(index++, "checked", _selectedCandidateId == item.CandidateId);
+                    builder.AddAttribute(index++, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, _ =>
+                    {
+                        _selectedCandidateId = item.CandidateId;
+                        _selectedMediaType = mediaType;
+                    }));
+                    builder.CloseElement();
 
-            builder.OpenElement(index++, "span");
-            builder.AddAttribute(index++, "class", "candidate-meta");
-            builder.AddContent(index++, $"Seeders: {item.Seeders?.ToString() ?? "-"} | Size: {FormatSize(item.SizeBytes)}");
-            builder.CloseElement();
+                    builder.OpenElement(index++, "label");
+                    builder.AddAttribute(index++, "for", inputId);
+                    builder.AddAttribute(index++, "class", "candidate-label");
 
-            builder.OpenElement(index++, "a");
-            builder.AddAttribute(index++, "href", item.SourceUrl);
-            builder.AddAttribute(index++, "target", "_blank");
-            builder.AddAttribute(index++, "rel", "noreferrer");
-            builder.AddContent(index++, "Source");
-            builder.CloseElement();
+                    builder.OpenElement(index++, "span");
+                    builder.AddAttribute(index++, "class", "candidate-title");
+                    builder.AddContent(index++, item.Title);
+                    builder.CloseElement();
 
-            builder.CloseElement();
+                    builder.OpenElement(index++, "span");
+                    builder.AddAttribute(index++, "class", "candidate-meta");
+                    builder.AddContent(index++, $"Seeders: {item.Seeders?.ToString() ?? "-"} | Size: {FormatSize(item.SizeBytes)}");
+                    builder.CloseElement();
+
+                    builder.OpenElement(index++, "a");
+                    builder.AddAttribute(index++, "href", item.SourceUrl);
+                    builder.AddAttribute(index++, "target", "_blank");
+                    builder.AddAttribute(index++, "rel", "noreferrer");
+                    builder.AddContent(index++, "Source");
+                    builder.CloseElement();
+
+                    builder.CloseElement();
+                    builder.CloseElement();
+                }
+
+                builder.CloseElement();
+            }
+
             builder.CloseElement();
         }
-
-        builder.CloseElement();
     };
+
+    private static bool HasAnyCandidateGroups(DownloadCandidatesResponse? response)
+    {
+        if (response?.Groups is null || response.Groups.Count == 0)
+        {
+            return false;
+        }
+
+        return response.Groups.Any(group => !string.IsNullOrWhiteSpace(group.ErrorMessage) || group.Items.Count > 0);
+    }
 
     private async Task AddAndDownloadAsync()
     {

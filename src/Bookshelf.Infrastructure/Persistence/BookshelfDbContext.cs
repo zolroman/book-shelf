@@ -307,8 +307,16 @@ public sealed class BookshelfDbContext : DbContext
         entity.Property(x => x.BookId).HasColumnName("book_id");
         entity.Property(x => x.MediaType).HasColumnName("media_type").HasConversion(MediaTypeConverter).IsRequired();
         entity.Property(x => x.Source).HasColumnName("source").IsRequired();
+        entity.Property(x => x.SourceProvider)
+            .HasColumnName("source_provider")
+            .HasDefaultValue("jackett")
+            .IsRequired();
+        entity.Property(x => x.ExecutionProvider)
+            .HasColumnName("execution_provider")
+            .HasDefaultValue("qbittorrent")
+            .IsRequired();
         entity.Property(x => x.ExternalJobId).HasColumnName("external_job_id");
-        entity.Property(x => x.TorrentMagnet).HasColumnName("torrent_magnet");
+        entity.Property(x => x.DownloadUri).HasColumnName("download_uri");
         entity.Property(x => x.Status).HasColumnName("status").HasConversion(DownloadJobStatusConverter).IsRequired();
         entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").HasDefaultValueSql("now()");
         entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").HasDefaultValueSql("now()");

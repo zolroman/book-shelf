@@ -77,7 +77,7 @@ public static class AddAndDownloadEndpoint
         catch (DownloadCandidateProviderUnavailableException exception)
         {
             throw new ApiException(
-                ApiErrorCodes.JackettUnavailable,
+                MapCandidateProviderErrorCode(exception.ProviderCode),
                 $"Candidate provider '{exception.ProviderCode}' is unavailable.",
                 HttpStatusCode.BadGateway);
         }
@@ -95,5 +95,15 @@ public static class AddAndDownloadEndpoint
                 $"Download provider '{exception.ProviderCode}' failed to enqueue torrent.",
                 HttpStatusCode.BadGateway);
         }
+    }
+
+    private static string MapCandidateProviderErrorCode(string providerCode)
+    {
+        return providerCode.Trim().ToLowerInvariant() switch
+        {
+            "jackett" => ApiErrorCodes.JackettUnavailable,
+            "flibusta" => ApiErrorCodes.FlibustaUnavailable,
+            _ => ApiErrorCodes.CandidateProviderUnavailable,
+        };
     }
 }
