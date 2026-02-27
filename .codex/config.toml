@@ -1,23 +1,23 @@
 [agents.default]
 description = "Main orchestrator; keeps requirements and merges results."
-config_file = ".codex/agents/default.toml"
+config_file = "agents/default.toml"
 
 [agents.explorer]
 description = "Fast read-heavy scan; finds files, entrypoints, dependencies, and existing patterns."
-config_file = ".codex/agents/explorer.toml"
+config_file = "agents/explorer.toml"
 
 [agents.reviewer]
 description = "Code review focused on correctness and security risks."
-config_file = ".codex/agents/reviewer.toml"
+config_file = "agents/reviewer.toml"
 
 [agents.backend]
 description = "Implements backend changes (APIs, DB, auth, domain logic)."
-config_file = ".codex/agents/backend.toml"
+config_file = "agents/backend.toml"
 
 [agents.frontend]
 description = "Implements web changes (UI, API client, routing, forms) and mobile changes (networking, state, screens, platform constraints)."
-config_file = ".codex/agents/frontend.toml"
+config_file = "agents/frontend.toml"
 
 [agents.playwright_tester]
 description = "Executes real-browser Web E2E checks via Playwright CLI, validates navigation/back behavior, and saves visual artifacts."
-config_file = ".codex/agents/playwright_tester.toml"
+config_file = "agents/playwright_tester.toml"

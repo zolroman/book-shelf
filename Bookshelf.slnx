@@ -7,6 +7,17 @@
   <Folder Name="/Agents/">
     <File Path="AGENTS.md" />
   </Folder>
+  <Folder Name="/Agents/.codex/">
+    <File Path=".codex/config.toml" />
+  </Folder>
+  <Folder Name="/Agents/.codex/agents/">
+    <File Path=".codex/agents/backend.toml" />
+    <File Path=".codex/agents/default.toml" />
+    <File Path=".codex/agents/explorer.toml" />
+    <File Path=".codex/agents/frontend.toml" />
+    <File Path=".codex/agents/playwright_tester.toml" />
+    <File Path=".codex/agents/reviewer.toml" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Bookshelf.Api/Bookshelf.Api.csproj" />
     <Project Path="src/Bookshelf.App/Bookshelf.App.csproj">

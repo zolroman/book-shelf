@@ -24,7 +24,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Search_WithoutQuery_ReturnsQueryRequired()
     {
-        using var client = _factory.CreateClient();
+        using var client = CreateAuthenticatedClient(_factory);
 
         var response = await client.GetAsync("/api/v1/search/books");
 
@@ -38,7 +38,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     public async Task ErrorResponse_ContainsPropagatedCorrelationId()
     {
         const string correlationId = "test-correlation-id";
-        using var client = _factory.CreateClient();
+        using var client = CreateAuthenticatedClient(_factory);
         client.DefaultRequestHeaders.Add(CorrelationIdMiddleware.HeaderName, correlationId);
 
         var response = await client.GetAsync("/api/v1/search/books");
@@ -68,7 +68,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         HttpResponseMessage? limitedResponse = null;
         for (var attempt = 0; attempt < 150; attempt++)
@@ -102,7 +102,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.PostAsJsonAsync(
             "/api/v1/library/add-and-download",
@@ -133,7 +133,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
         var userId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var request = new CreateShelfRequest(userId, "Sci-Fi");
 
@@ -160,7 +160,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
         var userId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var createResponse = await client.PostAsJsonAsync(
             "/api/v1/shelves",
@@ -184,7 +184,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Candidates_InvalidMediaType_ReturnsInvalidArgument()
     {
-        using var client = _factory.CreateClient();
+        using var client = CreateAuthenticatedClient(_factory);
 
         var response = await client.GetAsync("/api/v1/search/books/fantlab/123/candidates?mediaType=video");
 
@@ -197,7 +197,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Details_UnsupportedProvider_ReturnsInvalidArgument()
     {
-        using var client = _factory.CreateClient();
+        using var client = CreateAuthenticatedClient(_factory);
 
         var response = await client.GetAsync("/api/v1/search/books/other/123");
 
@@ -210,8 +210,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task SeriesDetails_UnsupportedProvider_ReturnsInvalidArgument()
     {
-        using var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:1");
+        using var client = CreateAuthenticatedClient(_factory);
 
         var response = await client.GetAsync("/api/v1/search/series/other/77");
 
@@ -233,8 +232,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:1");
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.GetAsync("/api/v1/search/series/fantlab/77");
 
@@ -260,7 +258,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.GetAsync("/api/v1/search/books/fantlab/123/candidates?mediaType=audio&page=1&pageSize=20");
 
@@ -286,7 +284,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.GetAsync("/api/v1/search/books/fantlab/123/candidates?mediaType=audio");
 
@@ -309,7 +307,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.GetAsync("/api/v1/search/books/fantlab/123/candidates?mediaType=audio");
 
@@ -332,7 +330,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.PostAsJsonAsync(
             "/api/v1/library/add-and-download",
@@ -357,7 +355,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.PostAsJsonAsync(
             "/api/v1/library/add-and-download",
@@ -382,7 +380,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.PostAsJsonAsync(
             "/api/v1/download-jobs/5/cancel",
@@ -407,7 +405,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         var response = await client.GetAsync("/api/v1/download-jobs?userId=1&status=wrong");
 
@@ -439,8 +437,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:12");
+        using var client = CreateAuthenticatedClient(factory, 12);
 
         var response = await client.GetAsync(
             "/api/v1/library?includeArchived=true&page=2&pageSize=5&query=dune&providerCode=fantlab&catalogState=library");
@@ -477,8 +474,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:21");
+        using var client = CreateAuthenticatedClient(factory, 21);
 
         var response = await client.PutAsJsonAsync(
             "/api/v1/progress",
@@ -508,8 +504,7 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
             });
         });
 
-        using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new("Bearer", "uid:21");
+        using var client = CreateAuthenticatedClient(factory, 21);
 
         var response = await client.PostAsJsonAsync(
             "/api/v1/history/events",
@@ -582,6 +577,13 @@ public class ApiContractTests : IClassFixture<WebApplicationFactory<Program>>
 
             return Task.FromResult<DownloadCandidateDto?>(null);
         }
+    }
+
+    private static HttpClient CreateAuthenticatedClient(WebApplicationFactory<Program> factory, long userId = 1)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", $"uid:{userId}");
+        return client;
     }
 
     private sealed class StubBookSearchService : IBookSearchService
