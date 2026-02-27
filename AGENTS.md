@@ -15,7 +15,7 @@
   - sandbox: `full-access`
 - `reviewer`: Code review focused on correctness and security risks.
   - model: `gpt-5.3-codex`
-  - effort: `xhigh`
+  - effort: `high`
   - sandbox: `full-access`
 - `backend`: Implements backend changes (APIs, DB, auth, domain logic).
   - model: `gpt-5.3-codex`
@@ -26,13 +26,16 @@
   - effort: `xhigh`
   - sandbox: `full-access`
 - `playwright_tester`: Executes real-browser Web E2E checks via Playwright CLI, validates navigation/back behavior, and saves visual artifacts.
-  - model: `gpt-5.3-codex`
+  - model: `gpt-5.3-codex-spark`
   - effort: `high`
   - sandbox: `full-access`
 
 ### Playwright Tester Instructions
 - Scope: Web UI only (`src/Bookshelf.Web` + shared Razor pages). Do not test Mobile App flows.
-- Always use the local Playwright skill wrapper first:
+- Always use the project wrapper first (enforces font fix for readable screenshots):
+  - `export PWWEB="./scripts/playwright-web.sh"`
+  - The wrapper unsets `FONTCONFIG_PATH` before launching Playwright, so system fonts are used.
+- Under the hood it uses the local Playwright skill wrapper:
   - `export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"`
   - `export PWCLI="$CODEX_HOME/skills/playwright/scripts/playwright_cli.sh"`
 - Preflight:
@@ -45,7 +48,7 @@
     - `http://localhost:5055/search`
 - Browser workflow (required):
   - open browser with explicit session and browser:
-    - `"$PWCLI" --session web-e2e open http://localhost:5055/search --browser firefox`
+    - `"$PWWEB" --session web-e2e open http://localhost:5055/search --browser firefox`
   - run `snapshot` before using refs (`eXX`)
   - re-run `snapshot` after each navigation or significant UI change
 - Artifact policy:
@@ -57,7 +60,7 @@
   - details -> back action returns to previous page
   - explicit UI back link returns to expected URL state (query/page preserved)
 - Cleanup (required):
-  - close Playwright session: `"$PWCLI" --session web-e2e close`
+  - close Playwright session: `"$PWWEB" --session web-e2e close`
   - stop temporary `dotnet run` processes started for the test
   - avoid leaving stale browser/server processes after completion
 

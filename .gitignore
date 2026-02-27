@@ -28,3 +28,7 @@ artifacts/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local Playwright artifacts
+.playwright-cli/
+output/

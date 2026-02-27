@@ -4,6 +4,9 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Folder Name="/Agents/">
+    <File Path="AGENTS.md" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Bookshelf.Api/Bookshelf.Api.csproj" />
     <Project Path="src/Bookshelf.App/Bookshelf.App.csproj">

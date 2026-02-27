@@ -1,6 +1,6 @@
 :root {
     color-scheme: light only;
-    font-family: "Open Sans", "Trebuchet MS", "Lucida Sans Unicode", sans-serif;
+    font-family: "Open Sans", "Noto Sans", "DejaVu Sans", "Liberation Sans", "Segoe UI", "Trebuchet MS", "Lucida Sans Unicode", "Arial", sans-serif;
     --text-main: #1c3841;
     --text-muted: #4f6972;
     --panel-bg: #fffcf6;
@@ -29,7 +29,7 @@ h3 {
     margin: 0 0 0.55rem;
     line-height: 1.2;
     color: #16313b;
-    font-family: "Palatino Linotype", "Book Antiqua", serif;
+    font-family: "Palatino Linotype", "Book Antiqua", "Noto Serif", "DejaVu Serif", "Liberation Serif", "Times New Roman", serif;
 }
 
 p {
