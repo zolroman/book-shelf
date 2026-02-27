@@ -16,6 +16,7 @@
     <Project Path="src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj" />
     <Project Path="src/Bookshelf.Shared/Bookshelf.Shared.csproj" />
     <Project Path="src/Bookshelf.Web/Bookshelf.Web.csproj" />
+    <Project Path="src/Bookshelf.Application/Bookshelf.Application.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj" />
