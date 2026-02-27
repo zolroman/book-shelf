@@ -7,24 +7,15 @@
 
 ## Restore
 ```powershell
-dotnet restore src/Bookshelf.Domain/Bookshelf.Domain.csproj
-dotnet restore src/Bookshelf.Application/Bookshelf.Application.csproj
-dotnet restore src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj
-dotnet restore src/Bookshelf.Shared/Bookshelf.Shared.csproj
-dotnet restore src/Bookshelf.Web/Bookshelf.Web.csproj
-dotnet restore src/Bookshelf.Api/Bookshelf.Api.csproj
-dotnet restore tests/Bookshelf.Domain.Tests/Bookshelf.Domain.Tests.csproj
-dotnet restore tests/Bookshelf.Application.Tests/Bookshelf.Application.Tests.csproj
-dotnet restore tests/Bookshelf.Infrastructure.Tests/Bookshelf.Infrastructure.Tests.csproj
-dotnet restore tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj
+dotnet restore Bookshelf.slnx
 ```
 
 ## Build
 ```powershell
-dotnet build Bookshelf.sln
+dotnet build Bookshelf.slnx --no-restore -m:1
 ```
 
-If MAUI workload is unavailable, build backend/web projects directly:
+If you need project-level builds, build backend/web projects directly:
 ```powershell
 dotnet build src/Bookshelf.Domain/Bookshelf.Domain.csproj
 dotnet build src/Bookshelf.Application/Bookshelf.Application.csproj

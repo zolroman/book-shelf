@@ -1,0 +1,23 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/Bookshelf.Api/Bookshelf.Api.csproj" />
+    <Project Path="src/Bookshelf.App/Bookshelf.App.csproj">
+      <Build Project="false" />
+    </Project>
+    <Project Path="src/Bookshelf.Domain/Bookshelf.Domain.csproj" />
+    <Project Path="src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj" />
+    <Project Path="src/Bookshelf.Shared/Bookshelf.Shared.csproj" />
+    <Project Path="src/Bookshelf.Web/Bookshelf.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj" />
+    <Project Path="tests/Bookshelf.Application.Tests/Bookshelf.Application.Tests.csproj" />
+    <Project Path="tests/Bookshelf.Domain.Tests/Bookshelf.Domain.Tests.csproj" />
+    <Project Path="tests/Bookshelf.Infrastructure.Tests/Bookshelf.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

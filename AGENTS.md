@@ -17,8 +17,8 @@
 - `tests/` mirrors layers: `Bookshelf.Domain.Tests`, `Bookshelf.Application.Tests`, `Bookshelf.Infrastructure.Tests`, `Bookshelf.Api.Tests`.
 
 ## Build, Test, and Development Commands
-- `dotnet restore Bookshelf.sln` restores dependencies.
-- `dotnet build Bookshelf.sln --no-restore -m:1` builds all projects.
+- `dotnet restore Bookshelf.slnx` restores dependencies.
+- `dotnet build Bookshelf.slnx --no-restore -m:1` builds all projects.
 - `dotnet test tests/Bookshelf.Domain.Tests/Bookshelf.Domain.Tests.csproj --no-restore`
 - `dotnet test tests/Bookshelf.Application.Tests/Bookshelf.Application.Tests.csproj --no-restore`
 - `dotnet test tests/Bookshelf.Infrastructure.Tests/Bookshelf.Infrastructure.Tests.csproj --no-restore`

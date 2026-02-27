@@ -100,7 +100,7 @@ Requirements are defined in `requirements/` and are the source of truth.
 
 ## Local Commands
 ```powershell
-dotnet build Bookshelf.sln --no-restore -m:1
+dotnet build Bookshelf.slnx --no-restore -m:1
 dotnet test tests/Bookshelf.Api.Tests/Bookshelf.Api.Tests.csproj --no-build
 dotnet ef database update --project src/Bookshelf.Infrastructure/Bookshelf.Infrastructure.csproj --startup-project src/Bookshelf.Api/Bookshelf.Api.csproj
 ```

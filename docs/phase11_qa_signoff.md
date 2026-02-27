@@ -1,7 +1,7 @@
 # Phase 11 QA Sign-Off (2026-02-18)
 
 ## Regression Summary
-- Build: `dotnet build Bookshelf.sln --no-restore -m:1` passed.
+- Build: `dotnet build Bookshelf.slnx --no-restore -m:1` passed.
 - Tests:
   - Domain: 20 passed
   - Application: 46 passed
