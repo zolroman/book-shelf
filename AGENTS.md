@@ -4,31 +4,9 @@
 - use MCP if needed
 
 ## Agent Configuration
-- Global sandbox mode for all agents: `Full access` (no sandbox).
-- `default`: Main orchestrator; keeps requirements and merges results.
-  - model: `gpt-5.3-codex`
-  - effort: `xhigh`
-  - sandbox: `full-access`
-- `explorer`: Fast read-heavy scan; finds files, entrypoints, dependencies, and existing patterns.
-  - model: `gpt-5.3-codex-spark`
-  - effort: `medium`
-  - sandbox: `full-access`
-- `reviewer`: Code review focused on correctness and security risks.
-  - model: `gpt-5.3-codex`
-  - effort: `high`
-  - sandbox: `full-access`
-- `backend`: Implements backend changes (APIs, DB, auth, domain logic).
-  - model: `gpt-5.3-codex`
-  - effort: `xhigh`
-  - sandbox: `full-access`
-- `frontend`: Implements web changes (UI, API client, routing, forms) and mobile changes (networking, state, screens, platform constraints).
-  - model: `gpt-5.3-codex`
-  - effort: `xhigh`
-  - sandbox: `full-access`
-- `playwright_tester`: Executes real-browser Web E2E checks via Playwright CLI, validates navigation/back behavior, and saves visual artifacts.
-  - model: `gpt-5.3-codex-spark`
-  - effort: `high`
-  - sandbox: `full-access`
+- Source of truth is [`/.codex/config.toml`](./.codex/config.toml).
+- Global sandbox mode for all agents: `full-access`.
+- Use profile names from config when spawning sub-agents: `default`, `explorer`, `reviewer`, `backend`, `frontend`, `playwright_tester`.
 
 ### Playwright Tester Instructions
 - Scope: Web UI only (`src/Bookshelf.Web` + shared Razor pages). Do not test Mobile App flows.

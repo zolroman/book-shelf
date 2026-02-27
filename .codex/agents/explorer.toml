@@ -1,0 +1,4 @@
+model = "gpt-5.3-codex-spark"
+model_reasoning_effort = "medium"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
