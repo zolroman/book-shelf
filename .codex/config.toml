@@ -1,3 +1,4 @@
+sandbox_mode = "workspace-write"
 [agents.default]
 description = "Main orchestrator; keeps requirements and merges results."
 config_file = "agents/default.toml"
@@ -21,3 +22,6 @@ config_file = "agents/frontend.toml"
 [agents.playwright_tester]
 description = "Executes real-browser Web E2E checks via Playwright CLI, validates navigation/back behavior, and saves visual artifacts."
 config_file = "agents/playwright_tester.toml"
+
+[sandbox_workspace_write]
+network_access = true
